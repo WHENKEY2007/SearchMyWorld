@@ -31,7 +31,7 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 rem Start backend in background if not already running
-start "SearchMyWorld Backend" /min cmd /c "cd /d "%~dp0backend" && .venv\Scripts\python.exe run.py"
+start "SearchMyWorld Backend" /min cmd /k "cd /d "%~dp0backend" && .venv\Scripts\python.exe run.py"
 
 rem Wait 3 seconds for server readiness
 timeout /t 3 /nobreak >nul
