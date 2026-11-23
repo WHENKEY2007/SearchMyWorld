@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database.connection import init_db
-from app.routers import folders, index, search, files, timeline, stats, projects, reconstruction
+from app.services.indexer import indexing_service
+from app.routers import folders, index, search, files, timeline, stats, projects, reconstruction, assistant
 
 # Setup logging
 logging.basicConfig(
@@ -19,7 +20,15 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing SearchMyWorld SQLite database...")
     init_db()
     logger.info(f"Database ready at: {settings.DB_PATH}")
+    
+    # Start Real-Time Background Folder Auto-Watcher
+    try:
+        indexing_service.start_background_watcher(poll_interval_seconds=15)
+    except Exception as e:
+        logger.warning(f"Could not start background folder watcher: {e}")
+
     yield
+    indexing_service.stop_background_watcher()
     logger.info("Shutting down SearchMyWorld backend.")
 
 app = FastAPI(
@@ -47,6 +56,7 @@ app.include_router(timeline.router, prefix=settings.API_PREFIX)
 app.include_router(stats.router, prefix=settings.API_PREFIX)
 app.include_router(projects.router, prefix=settings.API_PREFIX)
 app.include_router(reconstruction.router, prefix=settings.API_PREFIX)
+app.include_router(assistant.router, prefix=settings.API_PREFIX)
 
 @app.get(f"{settings.API_PREFIX}/health")
 def health_check():

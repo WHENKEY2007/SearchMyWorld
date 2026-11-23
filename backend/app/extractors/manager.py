@@ -10,12 +10,28 @@ from app.config import settings
 
 class ExtractorManager:
     def __init__(self):
+        txt_extractor = TXTExtractor()
         self._extractors: Dict[str, BaseExtractor] = {
             ".pdf": PDFExtractor(),
             ".docx": DOCXExtractor(),
             ".pptx": PPTXExtractor(),
-            ".txt": TXTExtractor(),
-            ".md": TXTExtractor(),
+            ".txt": txt_extractor,
+            ".md": txt_extractor,
+            ".csv": txt_extractor,
+            ".tsv": txt_extractor,
+            ".json": txt_extractor,
+            ".py": txt_extractor,
+            ".js": txt_extractor,
+            ".ts": txt_extractor,
+            ".html": txt_extractor,
+            ".css": txt_extractor,
+            ".yaml": txt_extractor,
+            ".yml": txt_extractor,
+            ".xml": txt_extractor,
+            ".log": txt_extractor,
+            ".sql": txt_extractor,
+            ".ini": txt_extractor,
+            ".rtf": txt_extractor,
             ".png": ImageOCRExtractor(),
             ".jpg": ImageOCRExtractor(),
             ".jpeg": ImageOCRExtractor(),

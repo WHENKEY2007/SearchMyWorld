@@ -27,7 +27,11 @@ class Settings(BaseModel):
     EMBEDDING_DIM: int = 384
     
     # Supported File Extensions
-    SUPPORTED_DOC_EXTENSIONS: set = {".pdf", ".docx", ".pptx", ".txt", ".md"}
+    SUPPORTED_DOC_EXTENSIONS: set = {
+        ".pdf", ".docx", ".pptx", ".txt", ".md",
+        ".csv", ".tsv", ".json", ".py", ".js", ".ts",
+        ".html", ".css", ".yaml", ".yml", ".xml", ".log", ".sql", ".ini", ".rtf"
+    }
     SUPPORTED_IMAGE_EXTENSIONS: set = {".png", ".jpg", ".jpeg"}
 
     @property

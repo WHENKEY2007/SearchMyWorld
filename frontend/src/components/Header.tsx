@@ -6,12 +6,17 @@ import { api, IndexingStatus } from '../api/client';
 export const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const [status, setStatus] = useState<IndexingStatus | null>(null);
+  const [autoSync, setAutoSync] = useState<{ auto_sync_enabled: boolean; monitored_folders: number; auto_sync_count: number } | null>(null);
   const [triggering, setTriggering] = useState(false);
 
   const fetchStatus = async () => {
     try {
-      const data = await api.getIndexingStatus();
+      const [data, syncData] = await Promise.all([
+        api.getIndexingStatus(),
+        api.getAutoSyncStatus().catch(() => null),
+      ]);
       setStatus(data);
+      if (syncData) setAutoSync(syncData);
     } catch {
       // ignore in offline/initial
     }
@@ -56,6 +61,8 @@ export const Header: React.FC = () => {
           <span className="font-medium">
             {isIndexing
               ? `Indexing: ${status?.current_file || 'Processing...'}`
+              : autoSync?.auto_sync_enabled
+              ? `Auto-Sync Active (${autoSync.monitored_folders} folders)`
               : 'Memory Synchronized'}
           </span>
           <button

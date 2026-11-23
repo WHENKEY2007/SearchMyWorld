@@ -8,10 +8,16 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Eye,
+  X,
 } from 'lucide-react';
 import { api, FileItem } from '../api/client';
+import { useNavigate } from 'react-router-dom';
+import { FileActionMenu } from '../components/FileActionMenu';
+import { Sparkles } from 'lucide-react';
 
 export const MyFiles: React.FC = () => {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -19,6 +25,7 @@ export const MyFiles: React.FC = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedFileChunks, setSelectedFileChunks] = useState<any[] | null>(null);
   const [selectedFileName, setSelectedFileName] = useState('');
+  const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
 
   const loadFiles = async () => {
     setLoading(true);
@@ -158,23 +165,54 @@ export const MyFiles: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    <td className="py-3.5 px-5 text-right whitespace-nowrap space-x-2">
-                      <button
-                        onClick={() => handleViewChunks(f.id, f.filename)}
-                        className="px-2.5 py-1 rounded-lg border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors"
-                        title="Inspect memory chunks"
-                      >
-                        <Layers size={13} className="inline mr-1" />
-                        Chunks
-                      </button>
-                      <button
-                        onClick={() => handleOpenFile(f.id)}
-                        className="px-2.5 py-1 rounded-lg bg-onyx text-white dark:bg-white dark:text-onyx font-medium transition-opacity hover:opacity-90"
-                        title="Open in Windows default application"
-                      >
-                        <ExternalLink size={13} className="inline mr-1" />
-                        Open
-                      </button>
+                    <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/assistant?fileId=${f.id}&fileName=${encodeURIComponent(f.filename)}`
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 dark:hover:bg-purple-900/60 border border-purple-200 dark:border-purple-800/40 text-xs font-semibold text-purple-700 dark:text-purple-300 transition-colors flex items-center gap-1 shadow-sm"
+                          title="Chat with this file using AI"
+                        >
+                          <Sparkles size={12} className="text-purple-600 dark:text-purple-400" />
+                          <span>Ask AI</span>
+                        </button>
+                        <button
+                          onClick={() => setPreviewFile(f)}
+                          className="px-2.5 py-1 rounded-lg border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors"
+                          title="Preview inside SearchMyWorld"
+                        >
+                          <Eye size={13} className="inline mr-1" />
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => handleViewChunks(f.id, f.filename)}
+                          className="px-2.5 py-1 rounded-lg border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors"
+                          title="Inspect memory chunks"
+                        >
+                          <Layers size={13} className="inline mr-1" />
+                          Chunks
+                        </button>
+                        <button
+                          onClick={() => handleOpenFile(f.id)}
+                          className="px-2.5 py-1 rounded-lg bg-onyx text-white dark:bg-white dark:text-onyx font-medium transition-opacity hover:opacity-90"
+                          title="Open in Windows default application"
+                        >
+                          <ExternalLink size={13} className="inline mr-1" />
+                          Open
+                        </button>
+                        <FileActionMenu
+                          file={{
+                            id: f.id,
+                            filename: f.filename,
+                            path: f.path,
+                            extension: f.extension,
+                          }}
+                          onPreview={() => setPreviewFile(f)}
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -221,6 +259,63 @@ export const MyFiles: React.FC = () => {
                     </p>
                   </div>
                 ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* In-App Document Preview Modal */}
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col p-6 shadow-glow space-y-4">
+            <div className="flex items-center justify-between border-b border-alabaster dark:border-white/10 pb-3">
+              <div className="truncate pr-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-porcelain-200 dark:bg-white/10 text-slate-700 dark:text-slate-300">
+                    {previewFile.extension.replace('.', '')}
+                  </span>
+                  <h3 className="font-serif font-bold text-lg text-charcoal dark:text-white truncate">
+                    {previewFile.filename}
+                  </h3>
+                </div>
+                <p className="text-xs font-mono text-slate-400 truncate mt-0.5">{previewFile.path}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleOpenFile(previewFile.id)}
+                  className="px-3.5 py-1.5 rounded-xl bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                >
+                  <ExternalLink size={13} /> Open in Windows
+                </button>
+                <button
+                  onClick={() => setPreviewFile(null)}
+                  className="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-white"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-[420px] overflow-auto bg-porcelain-100/50 dark:bg-black/30 rounded-2xl p-2 border border-alabaster dark:border-white/10 flex items-center justify-center">
+              {['.png', '.jpg', '.jpeg'].includes(previewFile.extension.toLowerCase()) ? (
+                <img
+                  src={`/api/files/${previewFile.id}/view`}
+                  alt={previewFile.filename}
+                  className="max-h-[65vh] object-contain rounded-xl shadow-lg"
+                />
+              ) : previewFile.extension.toLowerCase() === '.pdf' ? (
+                <iframe
+                  src={`/api/files/${previewFile.id}/view`}
+                  title={previewFile.filename}
+                  className="w-full h-[65vh] rounded-xl border-none shadow-sm"
+                />
+              ) : (
+                <iframe
+                  src={`/api/files/${previewFile.id}/view`}
+                  title={previewFile.filename}
+                  className="w-full h-[65vh] rounded-xl border-none shadow-sm bg-white dark:bg-black/40"
+                />
               )}
             </div>
           </div>

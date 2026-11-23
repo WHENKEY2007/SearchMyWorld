@@ -30,9 +30,3 @@ def compare_documents(req: ComparisonRequest):
         return document_comparison_engine.compare_documents(req.file_id_a, req.file_id_b)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-@router.post("/assistant/chat")
-def chat_with_memory(req: ChatRequest):
-    if not req.query.strip():
-        raise HTTPException(status_code=400, detail="Query cannot be empty")
-    return memory_assistant.answer_query(req.query.strip(), req.conversation_history)

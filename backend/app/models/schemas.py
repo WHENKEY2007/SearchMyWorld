@@ -15,6 +15,9 @@ class SearchRequest(BaseModel):
     limit: int = 20
     extension: Optional[str] = None
     file_type: Optional[str] = None
+    folder_id: Optional[str] = None
+    date_range: Optional[str] = None
+    only_bookmarked: bool = False
 
 class SearchResultItem(BaseModel):
     chunk_id: str
@@ -28,6 +31,7 @@ class SearchResultItem(BaseModel):
     full_content: str
     relevance_score: float
     matched_by: List[str]
+    is_bookmarked: bool = False
 
 class SearchResponse(BaseModel):
     query: str
@@ -41,7 +45,46 @@ class ImageOCRSearchResult(BaseModel):
     path: str
     extracted_text: str
     modified_at: Optional[str] = None
+    created_at: Optional[str] = None
     file_size: int
+
+class DuplicateFileItem(BaseModel):
+    id: str
+    folder_id: Optional[str] = None
+    filename: str
+    path: str
+    extension: str
+    file_type: str
+    file_size: int
+    created_at: Optional[str] = None
+    modified_at: Optional[str] = None
+    is_primary: bool = False
+    reason: str = ""
+
+class DuplicateGroup(BaseModel):
+    file_hash: str
+    file_size: int
+    total_copies: int
+    reclaimable_bytes: int
+    primary_file: DuplicateFileItem
+    duplicates: List[DuplicateFileItem]
+
+class DuplicateSummaryResponse(BaseModel):
+    total_duplicate_files: int
+    total_groups: int
+    total_reclaimable_bytes: int
+    groups: List[DuplicateGroup]
+
+class FolderStatsDetail(BaseModel):
+    folder_id: str
+    folder_path: str
+    total_files: int
+    indexed_files: int
+    total_size_bytes: int
+    extension_counts: Dict[str, int]
+    duplicate_count: int
+    reclaimable_bytes: int
+    delete_suggestions_count: int
 
 class FileResponse(BaseModel):
     id: str
