@@ -58,7 +58,6 @@ class IndexingService:
 
         try:
             file_stat = file_path.stat()
-            file_hash = self.compute_sha256(file_path)
             file_type = extractor_manager.get_file_type(file_path)
             created_at = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
             modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
@@ -69,9 +68,17 @@ class IndexingService:
 
         # Check existing record
         existing = DatabaseRepository.get_file_by_path(str(file_path))
-        if existing and existing["file_hash"] == file_hash and existing["indexing_status"] == "indexed":
-            logger.info(f"Skipping unchanged file: {file_path.name}")
-            return {"status": "skipped", "file_id": existing["id"], "path": str(file_path)}
+        if existing and existing.get("indexing_status") == "indexed":
+            # Fast-path check: if size and mtime match, skip reading and hashing disk entirely (0.05ms)
+            if existing.get("file_size") == file_size and existing.get("modified_at") == modified_at:
+                return {"status": "skipped", "file_id": existing["id"], "path": str(file_path)}
+            
+            # If metadata changed, compute hash to verify if file content actually changed
+            file_hash = self.compute_sha256(file_path)
+            if existing.get("file_hash") == file_hash:
+                return {"status": "skipped", "file_id": existing["id"], "path": str(file_path)}
+        else:
+            file_hash = self.compute_sha256(file_path)
 
         # Record file as pending
         file_id = DatabaseRepository.upsert_file(
