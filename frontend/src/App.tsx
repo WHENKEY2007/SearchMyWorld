@@ -12,12 +12,16 @@ import { Projects } from './pages/Projects';
 import { ProjectReconstruction } from './pages/ProjectReconstruction';
 import { AIAssistant } from './pages/AIAssistant';
 import { Settings } from './pages/Settings';
+import { CursorEffect } from './components/CursorEffect';
 
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <div className="flex h-screen bg-porcelain-100 text-charcoal dark:bg-onyx-400 dark:text-porcelain-100 overflow-hidden font-sans">
+        <div className="flex h-screen bg-porcelain-100 text-charcoal dark:bg-onyx-400 dark:text-porcelain-100 overflow-hidden font-sans relative">
+          {/* Smooth Cursor Animation & Ambient Depth Glow */}
+          <CursorEffect />
+
           {/* Collapsible Sidebar */}
           <Sidebar />
 
