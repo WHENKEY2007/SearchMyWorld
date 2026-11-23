@@ -71,10 +71,12 @@ export const Header: React.FC = () => {
         {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
-          className="p-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:text-onyx dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          className="p-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:text-onyx dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-300 transform active:scale-90"
           title={`Switch to ${theme === 'light' ? 'Dark Obsidian' : 'Light Porcelain'} mode`}
         >
-          {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          <div className="transition-transform duration-300 transform rotate-0 dark:rotate-180">
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          </div>
         </button>
       </div>
     </header>

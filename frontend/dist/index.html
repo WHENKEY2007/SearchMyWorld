@@ -5,12 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SearchMyWorld — Your AI Remembers</title>
+    <!-- Prevent FOUT (Flash of Unstyled Theme) -->
+    <script>
+      (function() {
+        const saved = localStorage.getItem('searchmyworld-theme');
+        if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <!-- Google Fonts: Instrument Serif, Plus Jakarta Sans, JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="/assets/index-BiLlKeq6.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DpSyj00I.css">
+    <script type="module" crossorigin src="/assets/index-ueptgusb.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BXXN_N8v.css">
   </head>
   <body class="bg-porcelain-100 text-charcoal font-sans antialiased selection:bg-onyx selection:text-white dark:bg-onyx-400 dark:text-porcelain-100 min-h-screen">
     <div id="root"></div>

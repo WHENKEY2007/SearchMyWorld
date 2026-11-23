@@ -225,9 +225,11 @@ export const Settings: React.FC = () => {
           </div>
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-xs font-semibold text-charcoal dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-xs font-semibold text-charcoal dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-300 transform active:scale-95"
           >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+            <div className="transition-transform duration-300 transform rotate-0 dark:rotate-180">
+              {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+            </div>
             Toggle Mode
           </button>
         </div>
