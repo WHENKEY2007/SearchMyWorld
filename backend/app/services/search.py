@@ -57,6 +57,9 @@ class HybridSearchEngine:
                             "filename": rec["filename"],
                             "path": rec["path"],
                             "extension": rec["extension"],
+                            "folder_id": rec.get("folder_id"),
+                            "modified_at": rec.get("modified_at"),
+                            "created_at": rec.get("created_at"),
                             "page_number": rec["page_number"],
                             "section_title": rec["section_title"],
                             "score": score
@@ -96,9 +99,13 @@ class HybridSearchEngine:
         import datetime
         now = datetime.datetime.now()
         date_cutoffs = {
+            "24h": (now - datetime.timedelta(days=1)).isoformat(),
             "today": (now - datetime.timedelta(days=1)).isoformat(),
+            "7d": (now - datetime.timedelta(days=7)).isoformat(),
             "week": (now - datetime.timedelta(days=7)).isoformat(),
+            "30d": (now - datetime.timedelta(days=30)).isoformat(),
             "month": (now - datetime.timedelta(days=30)).isoformat(),
+            "1y": (now - datetime.timedelta(days=365)).isoformat(),
             "year": (now - datetime.timedelta(days=365)).isoformat(),
         }
         cutoff = date_cutoffs.get(date_range) if date_range else None

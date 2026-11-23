@@ -56,13 +56,16 @@ class IndexingService:
         if not file_path.exists() or not extractor_manager.is_supported(file_path):
             return {"status": "unsupported", "path": str(file_path)}
 
-        file_stat = file_path.stat()
-        file_hash = self.compute_sha256(file_path)
-        file_type = extractor_manager.get_file_type(file_path)
-        
-        created_at = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
-        modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
-        file_size = file_stat.st_size
+        try:
+            file_stat = file_path.stat()
+            file_hash = self.compute_sha256(file_path)
+            file_type = extractor_manager.get_file_type(file_path)
+            created_at = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
+            modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+            file_size = file_stat.st_size
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Skipping locked or unreadable file {file_path}: {e}")
+            return {"status": "failed", "path": str(file_path), "error": str(e)}
 
         # Check existing record
         existing = DatabaseRepository.get_file_by_path(str(file_path))
@@ -270,8 +273,9 @@ class IndexingService:
                     if not folder_path.exists():
                         continue
 
-                    # Scan for new or modified files
-                    for root, _, filenames in os.walk(folder_path):
+                    # Scan for new or modified files (fast directory pruning to avoid heavy node_modules/.git polling)
+                    for root, dirs, filenames in os.walk(folder_path):
+                        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith('.')]
                         for fname in filenames:
                             fp = Path(root) / fname
                             if not extractor_manager.is_supported(fp):

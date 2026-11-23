@@ -414,20 +414,43 @@ class DatabaseRepository:
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
-                       c.page_number, c.section_title, bm25(chunks_fts) as rank
-                FROM chunks_fts fts
-                JOIN files f ON fts.file_id = f.id
-                JOIN document_chunks c ON fts.chunk_id = c.id
-                WHERE chunks_fts MATCH ?
-                ORDER BY rank ASC
-                LIMIT ?
-                """,
-                (fts_expr, limit)
-            )
-            return [dict(r) for r in cursor.fetchall()]
+            try:
+                cursor.execute(
+                    """
+                    SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
+                           c.page_number, c.section_title, bm25(chunks_fts) as rank
+                    FROM chunks_fts fts
+                    JOIN files f ON fts.file_id = f.id
+                    JOIN document_chunks c ON fts.chunk_id = c.id
+                    WHERE chunks_fts MATCH ?
+                    ORDER BY rank ASC
+                    LIMIT ?
+                    """,
+                    (fts_expr, limit)
+                )
+                return [dict(r) for r in cursor.fetchall()]
+            except sqlite3.OperationalError as e:
+                logger.warning(f"FTS5 match failed for expression '{fts_expr}': {e}. Retrying with literal token quotes.")
+                # Fallback: simple OR of literal quoted tokens
+                safe_expr = " OR ".join(f'"{t}"' for t in tokens)
+                try:
+                    cursor.execute(
+                        """
+                        SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
+                               c.page_number, c.section_title, bm25(chunks_fts) as rank
+                        FROM chunks_fts fts
+                        JOIN files f ON fts.file_id = f.id
+                        JOIN document_chunks c ON fts.chunk_id = c.id
+                        WHERE chunks_fts MATCH ?
+                        ORDER BY rank ASC
+                        LIMIT ?
+                        """,
+                        (safe_expr, limit)
+                    )
+                    return [dict(r) for r in cursor.fetchall()]
+                except Exception as inner_e:
+                    logger.error(f"FTS fallback also failed: {inner_e}")
+                    return []
 
     # ------------------ TIMELINE ------------------
     @staticmethod

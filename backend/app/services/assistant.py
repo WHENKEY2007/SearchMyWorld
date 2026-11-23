@@ -62,7 +62,8 @@ class MemoryAssistantService:
 
             # Check if image OCR text is present
             if not content_list and file_rec["file_type"] == "image":
-                with DatabaseRepository.get_db_connection() as conn:
+                from app.database.connection import get_db_connection
+                with get_db_connection() as conn:
                     cur = conn.cursor()
                     cur.execute("SELECT extracted_text FROM image_ocr WHERE file_id = ?", (focused_file_id,))
                     row = cur.fetchone()
