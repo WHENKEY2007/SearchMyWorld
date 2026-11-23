@@ -121,7 +121,7 @@ export const api = {
   },
 
   // OCR Visual Search
-  searchOcr: async (q: string): Promise<ImageOCRResult[]> => {
+  searchOcr: async (q: string = ''): Promise<ImageOCRResult[]> => {
     const res = await fetch(`${API_BASE}/search/ocr?q=${encodeURIComponent(q)}`);
     if (!res.ok) throw new Error('OCR search failed');
     return res.json();

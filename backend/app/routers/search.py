@@ -21,6 +21,6 @@ def hybrid_search(req: SearchRequest):
     }
 
 @router.get("/ocr", response_model=List[ImageOCRSearchResult])
-def search_ocr_images(q: str = Query(..., min_length=1), limit: int = 50):
+def search_ocr_images(q: Optional[str] = Query("", description="Search query or empty for recent"), limit: int = 50):
     """Specialized visual memory search over extracted screenshot and image OCR text."""
-    return DatabaseRepository.search_image_ocr(query=q, limit=limit)
+    return DatabaseRepository.search_image_ocr(query=q or "", limit=limit)

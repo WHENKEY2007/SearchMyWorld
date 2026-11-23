@@ -226,20 +226,35 @@ class DatabaseRepository:
             return ocr_id
 
     @staticmethod
-    def search_image_ocr(query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_image_ocr(query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT o.id, o.file_id, o.extracted_text, f.filename, f.path, f.modified_at, f.file_size
-                FROM image_ocr o
-                JOIN files f ON o.file_id = f.id
-                WHERE o.extracted_text LIKE ?
-                ORDER BY f.modified_at DESC
-                LIMIT ?
-                """,
-                (f"%{query}%", limit)
-            )
+            clean_q = (query or "").strip()
+            if not clean_q:
+                # Return recent images that contain extracted text
+                cursor.execute(
+                    """
+                    SELECT o.id, o.file_id, o.extracted_text, f.filename, f.path, f.modified_at, f.file_size
+                    FROM image_ocr o
+                    JOIN files f ON o.file_id = f.id
+                    WHERE LENGTH(TRIM(o.extracted_text)) > 0
+                    ORDER BY f.modified_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,)
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT o.id, o.file_id, o.extracted_text, f.filename, f.path, f.modified_at, f.file_size
+                    FROM image_ocr o
+                    JOIN files f ON o.file_id = f.id
+                    WHERE o.extracted_text LIKE ? OR f.filename LIKE ?
+                    ORDER BY f.modified_at DESC
+                    LIMIT ?
+                    """,
+                    (f"%{clean_q}%", f"%{clean_q}%", limit)
+                )
             return [dict(r) for r in cursor.fetchall()]
 
     # ------------------ FTS LEXICAL SEARCH ------------------
