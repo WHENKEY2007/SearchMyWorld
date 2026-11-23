@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sun, Moon, RefreshCw, CheckCircle2, AlertCircle, Clock, ChevronDown, FileText, ArrowRight } from 'lucide-react';
+import { Sun, Moon, RefreshCw, CheckCircle2, AlertCircle, Clock, ChevronDown, FileText, ArrowRight, Square } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import { api, IndexingStatus } from '../api/client';
@@ -56,6 +56,16 @@ export const Header: React.FC = () => {
     }
   };
 
+  const handleStopIndexing = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await api.stopIndexing();
+      await fetchStatus();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const total = status?.total_files_discovered || 0;
   const processed = status?.processed_files || 0;
   const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
@@ -90,14 +100,23 @@ export const Header: React.FC = () => {
 
           <ChevronDown size={13} className={`text-slate-400 transition-transform ${showProgressMenu ? 'rotate-180' : ''}`} />
 
-          <button
-            onClick={handleStartIndexing}
-            disabled={isIndexing}
-            className="ml-0.5 p-1 hover:text-onyx dark:hover:text-white disabled:opacity-50 transition-colors"
-            title="Scan folders and update index"
-          >
-            <RefreshCw size={12} className={isIndexing ? 'animate-spin text-amber-500' : ''} />
-          </button>
+          {isIndexing ? (
+            <button
+              onClick={handleStopIndexing}
+              className="ml-1 px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 transition-colors flex items-center gap-1 font-semibold text-[10px]"
+              title="Stop indexing process"
+            >
+              <Square size={10} className="fill-current" /> Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleStartIndexing}
+              className="ml-0.5 p-1 hover:text-onyx dark:hover:text-white transition-colors"
+              title="Scan folders and update index"
+            >
+              <RefreshCw size={12} />
+            </button>
+          )}
         </div>
 
         {/* Live Indexing Progress Drawer / Popover */}
@@ -128,6 +147,16 @@ export const Header: React.FC = () => {
                 <span>{status?.indexed_files || 0} indexed</span>
               </div>
             </div>
+
+            {/* Stop Button in Popover */}
+            {isIndexing && (
+              <button
+                onClick={handleStopIndexing}
+                className="w-full py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-400 text-xs font-semibold flex items-center justify-center gap-1.5 border border-red-200 transition-colors"
+              >
+                <Square size={12} className="fill-current" /> Stop Indexing Process
+              </button>
+            )}
 
             {/* Currently Processing File */}
             {isIndexing && status?.current_file && (

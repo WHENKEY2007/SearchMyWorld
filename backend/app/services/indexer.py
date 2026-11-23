@@ -22,6 +22,7 @@ IGNORED_DIRS = {
 class IndexingService:
     def __init__(self):
         self.is_indexing = False
+        self._cancel_requested = False
         self.current_progress = {
             "total_files_discovered": 0,
             "processed_files": 0,
@@ -32,6 +33,15 @@ class IndexingService:
             "status": "idle",
             "recent_files": []
         }
+
+    def stop_indexing(self) -> Dict[str, Any]:
+        """Request the running indexing job to stop gracefully."""
+        if not self.is_indexing:
+            return {"message": "Indexing is not currently running", "status": "idle"}
+        self._cancel_requested = True
+        self.current_progress["status"] = "cancelling"
+        logger.info("Stop indexing requested by user.")
+        return {"message": "Stopping indexing process gracefully...", "status": "cancelling"}
 
     def compute_sha256(self, file_path: Path) -> str:
         """Compute SHA-256 hash of a file efficiently in chunks."""
@@ -135,6 +145,7 @@ class IndexingService:
 
         folders = DatabaseRepository.get_folders()
         self.is_indexing = True
+        self._cancel_requested = False
         self.current_progress = {
             "total_files_discovered": 0,
             "processed_files": 0,
@@ -149,6 +160,8 @@ class IndexingService:
         try:
             discovered = []
             for folder in folders:
+                if self._cancel_requested:
+                    break
                 if not folder["indexing_enabled"]:
                     continue
                 folder_path = Path(folder["path"])
@@ -156,6 +169,8 @@ class IndexingService:
                     continue
 
                 for root, dirs, filenames in os.walk(folder_path):
+                    if self._cancel_requested:
+                        break
                     # Fast directory pruning: skip junk, caches, virtualenvs, git
                     dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith('.')]
                     for fname in filenames:
@@ -166,6 +181,11 @@ class IndexingService:
             self.current_progress["total_files_discovered"] = len(discovered)
 
             for fp, f_id in discovered:
+                if self._cancel_requested:
+                    logger.info("Indexing stopped early by user request.")
+                    self.current_progress["status"] = "stopped"
+                    break
+
                 self.current_progress["current_file"] = fp.name
                 res = self.scan_and_index_file(fp, folder_id=f_id)
                 self.current_progress["processed_files"] += 1
@@ -188,12 +208,14 @@ class IndexingService:
                 if len(self.current_progress["recent_files"]) > 15:
                     self.current_progress["recent_files"].pop()
 
-            self.current_progress["status"] = "completed"
+            if not self._cancel_requested:
+                self.current_progress["status"] = "completed"
         except Exception as e:
             logger.error(f"Error during folder indexing: {str(e)}")
             self.current_progress["status"] = "error"
         finally:
             self.is_indexing = False
+            self._cancel_requested = False
             self.current_progress["current_file"] = None
 
         return self.current_progress

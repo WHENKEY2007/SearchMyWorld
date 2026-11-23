@@ -17,6 +17,10 @@ def start_indexing(background_tasks: BackgroundTasks):
     background_tasks.add_task(_run_indexing_task)
     return {"message": "Background indexing started successfully", "status": "started"}
 
+@router.post("/stop")
+def stop_indexing():
+    return indexing_service.stop_indexing()
+
 @router.get("/status", response_model=IndexingProgressResponse)
 def get_indexing_status():
     return indexing_service.current_progress

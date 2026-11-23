@@ -193,6 +193,12 @@ export const api = {
     return res.json();
   },
 
+  stopIndexing: async (): Promise<{ message: string; status: string }> => {
+    const res = await fetch(`${API_BASE}/index/stop`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to stop indexing');
+    return res.json();
+  },
+
   getIndexingStatus: async (): Promise<IndexingStatus> => {
     const res = await fetch(`${API_BASE}/index/status`);
     if (!res.ok) throw new Error('Failed to fetch indexing status');

@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
+  Square,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api, FolderItem, IndexingStatus } from '../api/client';
@@ -100,6 +101,16 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const handleStopIndexing = async () => {
+    try {
+      await api.stopIndexing();
+      setMsg('Stopping indexing... Current file finishing up.');
+      setTimeout(loadStatus, 500);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleClearMemory = async () => {
     if (
       !confirm(
@@ -146,11 +157,23 @@ export const Settings: React.FC = () => {
                 {status.status === 'indexing' ? 'Indexing In Progress...' : 'Indexing Complete'}
               </h2>
             </div>
-            <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-porcelain-200 dark:bg-white/10 text-slate-700 dark:text-slate-200">
-              {status.status === 'indexing' 
-                ? `${Math.min(100, Math.round(((status.processed_files || 0) / Math.max(1, status.total_files_discovered || 1)) * 100))}%` 
-                : '100% Synced'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-porcelain-200 dark:bg-white/10 text-slate-700 dark:text-slate-200">
+                {status.status === 'indexing' 
+                  ? `${Math.min(100, Math.round(((status.processed_files || 0) / Math.max(1, status.total_files_discovered || 1)) * 100))}%` 
+                  : '100% Synced'}
+              </span>
+              {status.status === 'indexing' && (
+                <button
+                  onClick={handleStopIndexing}
+                  className="flex items-center gap-1 px-3 py-1 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-sm active:scale-95"
+                  title="Stop indexing process immediately"
+                >
+                  <Square size={10} className="fill-current" />
+                  Stop
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Progress Bar */}
@@ -233,13 +256,24 @@ export const Settings: React.FC = () => {
               Only explicitly selected folders are scanned. Original documents are never moved or modified.
             </p>
           </div>
-          <button
-            onClick={handleStartIndexing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold hover:opacity-90 transition-opacity"
-          >
-            <RefreshCw size={13} />
-            Scan & Index All
-          </button>
+          {status?.status === 'indexing' ? (
+            <button
+              onClick={handleStopIndexing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-sm active:scale-95 animate-pulse"
+              title="Stop indexing process"
+            >
+              <Square size={12} className="fill-current" />
+              Stop Indexing
+            </button>
+          ) : (
+            <button
+              onClick={handleStartIndexing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold hover:opacity-90 transition-opacity"
+            >
+              <RefreshCw size={13} />
+              Scan & Index All
+            </button>
+          )}
         </div>
 
         {/* Add Folder Form */}
