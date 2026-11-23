@@ -25,6 +25,18 @@ def stop_indexing():
 def get_indexing_status():
     return indexing_service.current_progress
 
+@router.get("/auto_sync")
+def get_auto_sync():
+    """Returns background auto-watcher status for real-time indexing."""
+    return indexing_service.get_auto_sync_status()
+
+@router.post("/auto_sync/toggle")
+def toggle_auto_sync():
+    """Toggles background real-time folder watching."""
+    current = getattr(indexing_service, "auto_sync_enabled", True)
+    indexing_service.auto_sync_enabled = not current
+    return {"auto_sync_enabled": indexing_service.auto_sync_enabled}
+
 @router.post("/clear")
 def clear_indexed_memory():
     if indexing_service.is_indexing:

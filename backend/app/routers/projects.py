@@ -9,6 +9,11 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 def list_projects():
     return DatabaseRepository.get_projects()
 
+@router.post("/auto-detect", response_model=List[ProjectResponse])
+def auto_detect_projects():
+    """Auto-detects project clusters from indexed folders and subdirectories."""
+    return DatabaseRepository.auto_detect_projects()
+
 @router.post("", response_model=ProjectResponse)
 def create_project(req: ProjectCreateRequest):
     return DatabaseRepository.create_project(name=req.name, description=req.description)

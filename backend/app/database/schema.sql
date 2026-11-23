@@ -130,3 +130,51 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     filename,
     tokenize = 'porter unicode61'
 );
+
+-- Persistent Chat Conversations and History
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    focused_file_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(focused_file_id) REFERENCES files(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    sender TEXT NOT NULL, -- 'user' | 'assistant'
+    text TEXT NOT NULL,
+    citations_json TEXT, -- JSON serialized citations
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON chat_messages(conversation_id);
+
+-- User Bookmarks / Starred Files
+CREATE TABLE IF NOT EXISTS user_bookmarks (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL UNIQUE,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_bookmarks_file ON user_bookmarks(file_id);
+
+-- User Tags for Files
+CREATE TABLE IF NOT EXISTS file_tags (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE,
+    UNIQUE(file_id, tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tags_file ON file_tags(file_id);
+CREATE INDEX IF NOT EXISTS idx_tags_tag ON file_tags(tag);
+
+

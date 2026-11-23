@@ -26,54 +26,13 @@ interface FeatureEvidence {
 export const ProjectReconstruction: React.FC = () => {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
-  const [projectTitle, setProjectTitle] = useState('AI Hackathon Project');
+  const [projectTitle, setProjectTitle] = useState('');
   const [isReconstructing, setIsReconstructing] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
   const [activeTab, setActiveTab] = useState<'features' | 'evolution' | 'decisions'>('features');
 
   // Evidence state
-  const [features, setFeatures] = useState<FeatureEvidence[]>([
-    {
-      feature_name: 'Local Vector Embeddings Engine',
-      status: 'verified_implemented',
-      evidence_quote: 'Generated dense vector representations using sentence-transformers (all-MiniLM-L6-v2) stored as float32 binary BLOBs.',
-      source_file: 'Phase1_Implementation_Report.docx',
-      page_number: 2,
-      file_id: 'sample-1',
-    },
-    {
-      feature_name: 'SQLite FTS5 Hybrid Retrieval',
-      status: 'verified_implemented',
-      evidence_quote: 'Reciprocal Rank Fusion (RRF) combines lexical BM25 ranking with dense vector cosine similarity.',
-      source_file: 'Architecture_Design.pdf',
-      page_number: 4,
-      file_id: 'sample-2',
-    },
-    {
-      feature_name: 'Visual OCR Screenshot Search',
-      status: 'in_progress',
-      evidence_quote: 'RapidOCR integration operational for PNG/JPG; advanced bounding-box visual reasoning scheduled.',
-      source_file: 'Visual_Memory_Notes.txt',
-      page_number: 1,
-      file_id: 'sample-3',
-    },
-    {
-      feature_name: 'Cross-Device Cloud Sync',
-      status: 'proposed',
-      evidence_quote: 'Optional end-to-end encrypted peer synchronization between user devices in future expansion.',
-      source_file: 'Initial_Proposal.docx',
-      page_number: 1,
-      file_id: 'sample-4',
-    },
-    {
-      feature_name: 'Audio/Video Meeting Transcription',
-      status: 'pending',
-      evidence_quote: 'Local Whisper transcription pipeline identified as pending task for upcoming release.',
-      source_file: 'Sprint_Backlog.txt',
-      page_number: 1,
-      file_id: 'sample-5',
-    },
-  ]);
-
+  const [features, setFeatures] = useState<FeatureEvidence[]>([]);
   const [evolutionData, setEvolutionData] = useState<any>(null);
   const [decisionsData, setDecisionsData] = useState<any[]>([]);
   const [conflictsData, setConflictsData] = useState<any[]>([]);
@@ -89,6 +48,25 @@ export const ProjectReconstruction: React.FC = () => {
       }
     });
   }, []);
+
+  const handleAutoDetect = async () => {
+    setIsDetecting(true);
+    try {
+      const projs = await api.autoDetectProjects();
+      setProjects(projs);
+      if (projs.length > 0) {
+        setSelectedProjectId(projs[0].id);
+        setProjectTitle(projs[0].project_name);
+        triggerReconstruction(projs[0].project_name);
+      } else {
+        alert('No distinct project folders detected yet. Make sure folders are added in Settings.');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Auto-detection failed');
+    } finally {
+      setIsDetecting(false);
+    }
+  };
 
   const triggerReconstruction = async (title: string) => {
     setIsReconstructing(true);
@@ -164,7 +142,7 @@ export const ProjectReconstruction: React.FC = () => {
 
       {/* Project Selector Bar */}
       <div className="glass-card rounded-2xl p-4 shadow-soft border border-alabaster dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Target Project:</span>
           {projects.length > 0 ? (
             <select
@@ -185,16 +163,26 @@ export const ProjectReconstruction: React.FC = () => {
           ) : (
             <input
               type="text"
+              placeholder="e.g. Thesis, Screenshots, Q3 Report"
               value={projectTitle}
               onChange={(e) => setProjectTitle(e.target.value)}
               className="px-3 py-1.5 rounded-xl border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-xs text-charcoal dark:text-white font-medium"
             />
           )}
+
+          <button
+            onClick={handleAutoDetect}
+            disabled={isDetecting}
+            className="px-3 py-1.5 rounded-xl border border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-xs text-slate-600 dark:text-slate-300 font-medium transition-colors"
+            title="Scan monitored folders to automatically identify project clusters"
+          >
+            {isDetecting ? 'Detecting...' : '✦ Auto-Detect from Folders'}
+          </button>
         </div>
 
         <button
           onClick={handleReconstruct}
-          disabled={isReconstructing}
+          disabled={isReconstructing || !projectTitle}
           className="w-full sm:w-auto px-6 py-2 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold hover:opacity-90 transition-opacity flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
         >
           <Sparkles size={14} className={isReconstructing ? 'animate-spin' : ''} />
@@ -247,34 +235,46 @@ export const ProjectReconstruction: React.FC = () => {
             <span className="text-slate-400">5 Status Tiers</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3.5">
-            {features.map((item, idx) => (
-              <div
-                key={idx}
-                className="glass-card rounded-2xl p-5 shadow-soft border border-alabaster dark:border-white/10 space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold text-charcoal dark:text-white">
-                    {item.feature_name}
-                  </h3>
-                  <div>{getStatusBadge(item.status)}</div>
-                </div>
+          {features.length === 0 ? (
+            <div className="text-center py-16 glass-card rounded-3xl p-8 space-y-3">
+              <Layers size={36} className="mx-auto text-slate-300 dark:text-slate-600" />
+              <h3 className="text-base font-serif font-semibold text-charcoal dark:text-white">
+                No Project Reconstruction Generated Yet
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Select a project above or click <strong>"✦ Auto-Detect from Folders"</strong> to scan your documents, extract decisions, feature evolution, and milestones.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3.5">
+              {features.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="glass-card rounded-2xl p-5 shadow-soft border border-alabaster dark:border-white/10 space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 className="text-base font-semibold text-charcoal dark:text-white">
+                      {item.feature_name}
+                    </h3>
+                    <div>{getStatusBadge(item.status)}</div>
+                  </div>
 
-                {/* Evidence Passage with Citation */}
-                <div className="p-3.5 rounded-xl bg-porcelain-100/90 dark:bg-white/5 border border-alabaster dark:border-white/10 space-y-2">
-                  <p className="text-xs font-mono text-slate-700 dark:text-slate-300 leading-relaxed italic">
-                    "{item.evidence_quote}"
-                  </p>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-alabaster dark:border-white/10">
-                    <span className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
-                      <FileText size={13} /> {item.source_file} {item.page_number ? `(Page ${item.page_number})` : ''}
-                    </span>
-                    <span className="font-mono text-[10px]">Verified Provenance</span>
+                  {/* Evidence Passage with Citation */}
+                  <div className="p-3.5 rounded-xl bg-porcelain-100/90 dark:bg-white/5 border border-alabaster dark:border-white/10 space-y-2">
+                    <p className="text-xs font-mono text-slate-700 dark:text-slate-300 leading-relaxed italic">
+                      "{item.evidence_quote}"
+                    </p>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-alabaster dark:border-white/10">
+                      <span className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
+                        <FileText size={13} /> {item.source_file} {item.page_number ? `(Page ${item.page_number})` : ''}
+                      </span>
+                      <span className="font-mono text-[10px]">Verified Provenance</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -284,32 +284,41 @@ export const ProjectReconstruction: React.FC = () => {
           <h3 className="font-serif font-bold text-xl text-charcoal dark:text-white">
             Architecture & Design Evolution
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 rounded-2xl bg-porcelain-200/50 dark:bg-white/5 border border-alabaster dark:border-white/10 space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
-                Initial Proposal Design
-              </span>
-              <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-4 leading-relaxed">
-                <li>Cloud-based vector database (Pinecone/Milvus).</li>
-                <li>External LLM API dependency for parsing.</li>
-                <li>Monolithic scanning on single directory.</li>
-              </ul>
-              <p className="text-[11px] text-slate-400 italic">Source: Project_Proposal.docx (p. 2)</p>
-            </div>
+          {evolutionData && (evolutionData.initial_points?.length > 0 || evolutionData.modified_points?.length > 0) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-5 rounded-2xl bg-porcelain-200/50 dark:bg-white/5 border border-alabaster dark:border-white/10 space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                  Initial Proposal / Early Design
+                </span>
+                <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-4 leading-relaxed">
+                  {(evolutionData.initial_points || []).map((pt: any, i: number) => (
+                    <li key={i}>
+                      <span>{pt.description}</span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">Source: {pt.source_file}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-            <div className="p-5 rounded-2xl bg-pastel-mint/30 dark:bg-emerald-950/20 border border-pastel-mintBorder/60 space-y-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                Current Modified Architecture
-              </span>
-              <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-4 leading-relaxed">
-                <li>Local SQLite WAL mode with FTS5 virtual tables.</li>
-                <li>Offline sentence-transformers (all-MiniLM-L6-v2) inference.</li>
-                <li>RapidOCR local visual pipeline for screenshots.</li>
-                <li>Zero external API dependencies (100% private).</li>
-              </ul>
-              <p className="text-[11px] text-slate-400 italic">Source: Final_Architecture_Review.pdf (p. 5)</p>
+              <div className="p-5 rounded-2xl bg-pastel-mint/30 dark:bg-emerald-950/20 border border-pastel-mintBorder/60 space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  Current / Modified Evolution
+                </span>
+                <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 list-disc pl-4 leading-relaxed">
+                  {(evolutionData.modified_points || []).map((pt: any, i: number) => (
+                    <li key={i}>
+                      <span>{pt.description}</span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">Source: {pt.source_file}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="text-center py-12 text-xs text-slate-400">
+              No architectural shift documents found for this project yet.
+            </div>
+          )}
         </div>
       )}
 
@@ -319,29 +328,28 @@ export const ProjectReconstruction: React.FC = () => {
           <h3 className="font-serif font-bold text-xl text-charcoal dark:text-white">
             Documented Technical Decisions
           </h3>
-          <div className="divide-y divide-alabaster dark:divide-white/10">
-            <div className="py-3.5 space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-charcoal dark:text-white">Decision: Local SQLite over Dedicated Vector DB</span>
-                <span className="text-slate-400">January 2026</span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                Chosen to keep installation lightweight on standard Windows laptops (8GB RAM) with zero complex external dependencies.
-              </p>
-              <p className="text-[11px] text-slate-400 italic">Source: Tech_Debate_Notes.txt</p>
+          {decisionsData.length === 0 ? (
+            <div className="text-center py-12 text-xs text-slate-400">
+              No explicit decisions detected in indexed documents for this project.
             </div>
-
-            <div className="py-3.5 space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-charcoal dark:text-white">Decision: Reciprocal Rank Fusion (RRF) for Hybrid Retrieval</span>
-                <span className="text-slate-400">February 2026</span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                Blends BM25 lexical precision with semantic vector conceptual understanding without needing score calibration.
-              </p>
-              <p className="text-[11px] text-slate-400 italic">Source: Search_Design_Spec.docx</p>
+          ) : (
+            <div className="divide-y divide-alabaster dark:divide-white/10">
+              {decisionsData.map((d: any, i: number) => (
+                <div key={i} className="py-3.5 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-charcoal dark:text-white">
+                      Decision: {d.decision || d.decision_description}
+                    </span>
+                    <span className="text-slate-400">{d.decision_date || 'Documented'}</span>
+                  </div>
+                  {d.rationale && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400">{d.rationale}</p>
+                  )}
+                  <p className="text-[11px] text-slate-400 italic">Source: {d.source_file || d.filename}</p>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

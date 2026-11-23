@@ -23,7 +23,8 @@ def init_db() -> None:
 @contextmanager
 def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
     """Context manager for SQLite connections with row factory and pragmas enabled."""
-    conn = sqlite3.connect(settings.DB_PATH, timeout=30.0)
+    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(settings.DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     try:

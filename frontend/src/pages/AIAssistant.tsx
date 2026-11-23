@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Bot,
   Send,
@@ -6,10 +6,21 @@ import {
   Sparkles,
   FileText,
   ExternalLink,
-  ShieldCheck,
-  HelpCircle,
+  Plus,
+  Trash2,
+  MessageSquare,
+  X,
+  FileCode,
+  Copy,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  Paperclip,
+  Clock,
 } from 'lucide-react';
-import { api } from '../api/client';
+import { useSearchParams } from 'react-router-dom';
+import { api, ConversationItem } from '../api/client';
 
 interface Message {
   id: string;
@@ -22,26 +33,141 @@ interface Message {
     page_number?: number;
     file_id: string;
   }>;
+  created_at?: string;
 }
 
-const PROMPT_SUGGESTIONS = [
-  'What are the main components of my AI project?',
+const GLOBAL_SUGGESTIONS = [
+  'What are the main components of my AI projects?',
   'Where did I write about Support Vector Machines?',
   'What decisions did we make regarding the database?',
-  'Which tasks were planned but remain unfinished?',
+  'Find any unpaid invoices or approval letters.',
+];
+
+const DOCUMENT_SUGGESTIONS = [
+  'Summarize this document thoroughly',
+  'What are the key takeaways and decisions?',
+  'List any dates, deadlines, or action items mentioned',
+  'Who are the people or entities mentioned in this file?',
 ];
 
 export const AIAssistant: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      sender: 'assistant',
-      text: "Hello! I am your local digital memory assistant. Ask me anything to quickly locate your documents and files.",
-    },
-  ]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const fileIdParam = searchParams.get('fileId');
+  const fileNameParam = searchParams.get('fileName');
+
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+  const [focusedFile, setFocusedFile] = useState<{ id: string; name: string } | null>(null);
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load conversations on mount
+  const loadConversations = async () => {
+    try {
+      const data = await api.getConversations();
+      setConversations(data);
+      return data;
+    } catch (err) {
+      console.error('Failed to load conversations', err);
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    loadConversations().then((convs) => {
+      // If focused file is passed in URL params, set it up
+      if (fileIdParam && fileNameParam) {
+        setFocusedFile({ id: fileIdParam, name: fileNameParam });
+        // Create or select conversation for this document
+        startNewChat(fileNameParam ? `Doc: ${fileNameParam}` : 'Document Analysis', fileIdParam);
+      } else if (convs.length > 0 && !currentConvId) {
+        selectConversation(convs[0].id);
+      } else if (convs.length === 0) {
+        startNewChat('General Memory Assistant');
+      }
+    });
+  }, [fileIdParam, fileNameParam]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
+
+  const selectConversation = async (convId: string) => {
+    setCurrentConvId(convId);
+    setLoading(true);
+    try {
+      const res = await api.getConversationHistory(convId);
+      if (res.messages.length > 0) {
+        setMessages(
+          res.messages.map((m: any) => ({
+            id: m.id,
+            sender: m.sender,
+            text: m.text,
+            sources: m.sources,
+            created_at: m.created_at,
+          }))
+        );
+      } else {
+        setMessages([
+          {
+            id: 'welcome',
+            sender: 'assistant',
+            text: focusedFile
+              ? `Ready to analyze **${focusedFile.name}**. What would you like to know or summarize about this document?`
+              : 'Hello! I am your personal digital memory assistant. Ask me anything to quickly locate, summarize, or cross-reference your personal documents and screenshots.',
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error('Failed to load thread history', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startNewChat = async (title: string = 'New Chat', focusedFileId?: string) => {
+    try {
+      const newConv = await api.createConversation(title, focusedFileId);
+      setConversations((prev) => [newConv, ...prev]);
+      setCurrentConvId(newConv.id);
+      setMessages([
+        {
+          id: 'welcome',
+          sender: 'assistant',
+          text: focusedFileId && focusedFile
+            ? `Ready to analyze **${focusedFile.name}**. What would you like to know or summarize about this document?`
+            : 'Hello! I am your personal digital memory assistant. Ask me anything to quickly locate, summarize, or cross-reference your personal documents and screenshots.',
+        },
+      ]);
+    } catch (err) {
+      console.error('Failed to create new conversation', err);
+    }
+  };
+
+  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
+    try {
+      await api.deleteConversation(convId);
+      const remaining = conversations.filter((c) => c.id !== convId);
+      setConversations(remaining);
+      if (currentConvId === convId) {
+        if (remaining.length > 0) {
+          selectConversation(remaining[0].id);
+        } else {
+          startNewChat();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete conversation', err);
+    }
+  };
 
   const handleSend = async (textToSend?: string) => {
     const q = (textToSend || input).trim();
@@ -51,23 +177,33 @@ export const AIAssistant: React.FC = () => {
       id: Date.now().toString(),
       sender: 'user',
       text: q,
+      created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
     setLoading(true);
 
     try {
-      // Perform grounded query via backend Assistant engine
-      const res = await api.chatWithMemory(q);
+      const res = await api.chatWithMemory(
+        q,
+        currentConvId || undefined,
+        focusedFile?.id || undefined
+      );
+
+      if (res.conversation_id && res.conversation_id !== currentConvId) {
+        setCurrentConvId(res.conversation_id);
+      }
 
       const botMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: res.message?.id || (Date.now() + 1).toString(),
         sender: 'assistant',
         text: res.answer,
         sources: res.citations && res.citations.length > 0 ? res.citations : undefined,
+        created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, botMsg]);
+      loadConversations();
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -90,153 +226,248 @@ export const AIAssistant: React.FC = () => {
     } catch (e: any) {
       alert(`Could not open file: ${e.message}`);
     } finally {
-      setTimeout(() => setOpeningId(null), 1500);
+      setTimeout(() => setOpeningId(null), 1200);
     }
   };
 
+  const handleCopyText = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const clearFocusedFile = () => {
+    setFocusedFile(null);
+    searchParams.delete('fileId');
+    searchParams.delete('fileName');
+    setSearchParams(searchParams);
+  };
+
   return (
-    <div className="max-w-4xl mx-auto py-6 flex flex-col h-[calc(100vh-6rem)]">
-      {/* Header */}
-      <div className="text-center space-y-2 pb-4 border-b border-alabaster dark:border-white/10 flex-shrink-0">
-        <h1 className="text-3xl font-serif text-charcoal dark:text-white tracking-tight">
-          Personal AI <span className="italic font-normal">Memory Assistant.</span>
-        </h1>
-        <p className="text-xs text-slate-500 max-w-md mx-auto">
-          Grounded strictly in retrieved personal files. Never hallucinating or fabricating memories.
-        </p>
+    <div className="max-w-6xl mx-auto py-4 flex gap-4 h-[calc(100vh-5.5rem)]">
+      {/* Sidebar: Persistent Chat Threads */}
+      <div
+        className={`${
+          sidebarOpen ? 'w-72' : 'w-0 -ml-4 overflow-hidden opacity-0'
+        } transition-all duration-300 flex-shrink-0 flex flex-col glass-card rounded-3xl p-3 border border-alabaster dark:border-white/10 shadow-soft`}
+      >
+        <div className="flex items-center justify-between pb-3 px-2 border-b border-alabaster dark:border-white/10">
+          <div className="flex items-center gap-2">
+            <MessageSquare size={17} className="text-purple-600 dark:text-purple-400" />
+            <span className="font-serif font-bold text-sm text-charcoal dark:text-white">Conversations</span>
+          </div>
+          <button
+            onClick={() => startNewChat()}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-medium hover:opacity-90 transition-opacity"
+            title="Start new conversation"
+          >
+            <Plus size={13} />
+            <span>New</span>
+          </button>
+        </div>
+
+        {/* Conversation List */}
+        <div className="flex-1 overflow-y-auto py-2 space-y-1 pr-1">
+          {conversations.length === 0 ? (
+            <div className="text-center py-8 text-xs text-slate-400">No past conversations</div>
+          ) : (
+            conversations.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => selectConversation(c.id)}
+                className={`group flex items-center justify-between px-3 py-2.5 rounded-2xl cursor-pointer text-xs transition-all ${
+                  currentConvId === c.id
+                    ? 'bg-purple-100/70 dark:bg-purple-950/60 font-semibold text-purple-900 dark:text-purple-200 shadow-sm border border-purple-200 dark:border-purple-800/40'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/5'
+                }`}
+              >
+                <div className="truncate flex-1 pr-2">
+                  <p className="truncate text-charcoal dark:text-slate-200">{c.title || 'Untitled Chat'}</p>
+                  {c.focused_filename && (
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400 flex items-center gap-1 font-mono truncate">
+                      📄 {c.focused_filename}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => handleDeleteConversation(e, c.id)}
+                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-1"
+                  title="Delete conversation"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
-      {/* Messages Stream */}
-      <div className="flex-1 overflow-y-auto py-6 space-y-5 pr-2">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex gap-3.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            {msg.sender === 'assistant' && (
-              <div className="w-8 h-8 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
-                <Bot size={16} />
-              </div>
-            )}
-
-            <div
-              className={`max-w-2xl rounded-2xl p-4 text-xs leading-relaxed space-y-3 ${
-                msg.sender === 'user'
-                  ? 'bg-onyx text-white dark:bg-white dark:text-onyx rounded-br-sm shadow-sm'
-                  : 'glass-card border border-alabaster dark:border-white/10 text-charcoal dark:text-porcelain-100 rounded-bl-sm shadow-soft'
-              }`}
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col glass-card rounded-3xl p-5 border border-alabaster dark:border-white/10 shadow-soft min-w-0">
+        {/* Chat Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-alabaster dark:border-white/10 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1.5 rounded-xl border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-slate-500 transition-colors"
+              title={sidebarOpen ? 'Collapse sidebar' : 'Open conversations'}
             >
-              <p className="whitespace-pre-line text-sm font-medium">{msg.text}</p>
+              {sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            </button>
+            <div>
+              <h1 className="text-xl font-serif font-bold text-charcoal dark:text-white flex items-center gap-2">
+                Personal AI Memory Partner
+                <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
+                  Grounded 100% Offline
+                </span>
+              </h1>
+            </div>
+          </div>
+        </div>
 
-              {/* Matching Files Cards */}
-              {msg.sources && msg.sources.length > 0 && (
-                <div className="pt-2 border-t border-alabaster dark:border-white/10 space-y-2">
-                  <div className="grid grid-cols-1 gap-2">
-                    {msg.sources.map((src, i) => {
-                      const pagesStr =
-                        src.pages && src.pages.length > 0
-                          ? `Page ${src.pages.join(', ')}`
-                          : src.page_number
-                          ? `Page ${src.page_number}`
-                          : null;
+        {/* Focused Document Mode Banner */}
+        {focusedFile && (
+          <div className="mt-3 p-3 rounded-2xl bg-gradient-to-r from-purple-500/10 via-amber-500/10 to-transparent border border-purple-300 dark:border-purple-800/50 flex items-center justify-between gap-3 text-xs flex-shrink-0 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2.5 truncate">
+              <span className="px-2 py-1 rounded-xl bg-purple-600 text-white font-bold font-mono text-[10px] uppercase">
+                Document Chat Mode
+              </span>
+              <span className="font-semibold text-charcoal dark:text-white truncate">
+                Focused on: <span className="font-mono text-purple-700 dark:text-purple-300">{focusedFile.name}</span>
+              </span>
+            </div>
+            <button
+              onClick={clearFocusedFile}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 transition-colors"
+              title="Return to global memory mode"
+            >
+              <X size={13} />
+              <span>Clear Focus</span>
+            </button>
+          </div>
+        )}
 
-                      const isOpening = openingId === src.file_id;
+        {/* Messages Stream */}
+        <div className="flex-1 overflow-y-auto py-5 space-y-5 pr-2">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex gap-3.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              {msg.sender === 'assistant' && (
+                <div className="w-8 h-8 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx flex items-center justify-center flex-shrink-0 mt-1 shadow-sm">
+                  <Bot size={16} />
+                </div>
+              )}
 
-                      return (
+              <div
+                className={`max-w-2xl rounded-3xl p-4.5 space-y-3 relative group transition-all ${
+                  msg.sender === 'user'
+                    ? 'bg-onyx text-white dark:bg-white dark:text-onyx rounded-tr-sm ml-12 shadow-soft'
+                    : 'bg-porcelain-100 dark:bg-white/5 text-charcoal dark:text-white border border-alabaster dark:border-white/10 rounded-tl-sm mr-12'
+                }`}
+              >
+                {/* Message Header & Copy */}
+                <div className="flex items-center justify-between text-[11px] opacity-70">
+                  <span className="font-medium">{msg.sender === 'user' ? 'You' : 'SearchMyWorld Assistant'}</span>
+                  <button
+                    onClick={() => handleCopyText(msg.text, msg.id)}
+                    className="opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity p-0.5 rounded text-current hover:bg-black/10 dark:hover:bg-white/10"
+                    title="Copy message text"
+                  >
+                    {copiedId === msg.id ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                  </button>
+                </div>
+
+                {/* Text Content */}
+                <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                  {msg.text}
+                </div>
+
+                {/* Grounded Document Citations */}
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="pt-3 border-t border-alabaster dark:border-white/10 space-y-2">
+                    <p className="text-[11px] font-semibold tracking-wide uppercase text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                      <Sparkles size={12} className="text-purple-600 dark:text-purple-400" />
+                      Grounded in Personal Files:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {msg.sources.map((src, i) => (
                         <div
                           key={i}
                           onClick={() => handleOpenFile(src.file_id)}
-                          className="p-3 rounded-xl bg-porcelain-100/90 dark:bg-white/5 border border-alabaster dark:border-white/10 flex items-center justify-between gap-3 hover:bg-black/5 dark:hover:bg-white/10 hover:border-purple-300 dark:hover:border-purple-500/40 transition-all cursor-pointer group"
-                          title="Click to open file in default application"
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-onyx-card border border-alabaster dark:border-white/10 hover:border-purple-400 dark:hover:border-purple-500 cursor-pointer text-xs transition-all shadow-sm group/cite"
+                          title={`Click to open ${src.filename}`}
                         >
-                          <div className="flex items-center gap-3 truncate flex-1">
-                            <span className="text-[10px] font-mono font-bold uppercase px-2 py-1 rounded bg-pastel-lilac text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 flex-shrink-0 group-hover:scale-105 transition-transform">
-                              {src.filename.split('.').pop() || 'FILE'}
-                            </span>
-                            <div className="truncate flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-sm text-charcoal dark:text-white group-hover:text-purple-700 dark:group-hover:text-purple-400 group-hover:underline truncate transition-colors">
-                                  {src.filename}
-                                </span>
-                                {pagesStr && (
-                                  <span className="text-[10px] bg-porcelain-200 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full flex-shrink-0">
-                                    {pagesStr}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] font-mono text-slate-400 truncate max-w-lg mt-0.5">
-                                {src.path}
-                              </p>
-                            </div>
-                          </div>
-
-                          {isOpening && (
-                            <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 flex-shrink-0 animate-pulse">
-                              Opening...
+                          <FileText size={13} className="text-purple-600 dark:text-purple-400" />
+                          <span className="font-medium text-charcoal dark:text-white group-hover/cite:text-purple-700 dark:group-hover/cite:text-purple-300 truncate max-w-xs">
+                            {src.filename}
+                          </span>
+                          {src.pages && src.pages.length > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-mono">
+                              p.{src.pages.join(',')}
                             </span>
                           )}
+                          <ExternalLink size={11} className="opacity-40 group-hover/cite:opacity-100 text-slate-500" />
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {msg.sender === 'user' && (
+                <div className="w-8 h-8 rounded-full bg-porcelain-300 dark:bg-white/10 flex items-center justify-center flex-shrink-0 mt-1 text-slate-600 dark:text-slate-300">
+                  <User size={16} />
                 </div>
               )}
             </div>
+          ))}
 
-            {msg.sender === 'user' && (
-              <div className="w-8 h-8 rounded-full bg-porcelain-200 dark:bg-white/10 text-charcoal dark:text-white flex items-center justify-center flex-shrink-0 mt-1">
-                <User size={16} />
-              </div>
-            )}
-          </div>
-        ))}
-        {loading && (
-          <div className="flex items-center gap-2 text-xs text-slate-400 pl-11">
-            <Sparkles size={14} className="animate-spin text-purple-600" />
-            <span>Consulting personal memory store...</span>
-          </div>
-        )}
-      </div>
+          {loading && (
+            <div className="flex gap-3.5 items-center text-slate-400 text-xs py-2 pl-2 animate-pulse">
+              <Bot size={16} />
+              <span>Analyzing local document chunks and synthesizing grounded answer...</span>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-      {/* Suggested prompts */}
-      <div className="flex items-center gap-1.5 overflow-x-auto py-2 flex-shrink-0">
-        <span className="text-[11px] text-slate-400 whitespace-nowrap">Suggestions:</span>
-        {PROMPT_SUGGESTIONS.map((p) => (
-          <button
-            key={p}
-            onClick={() => handleSend(p)}
-            className="text-[11px] whitespace-nowrap px-3 py-1 rounded-full border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-slate-500 hover:text-onyx dark:hover:text-white transition-colors"
-          >
-            {p}
-          </button>
-        ))}
-      </div>
+        {/* Quick Suggestion Chips */}
+        <div className="py-2 flex items-center gap-2 overflow-x-auto no-scrollbar flex-shrink-0">
+          {(focusedFile ? DOCUMENT_SUGGESTIONS : GLOBAL_SUGGESTIONS).map((prompt, i) => (
+            <button
+              key={i}
+              onClick={() => handleSend(prompt)}
+              className="px-3 py-1.5 rounded-full bg-porcelain-200/80 dark:bg-white/5 border border-alabaster dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:text-charcoal dark:hover:text-white hover:border-purple-300 dark:hover:border-purple-600 transition-all whitespace-nowrap flex-shrink-0"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
 
-      {/* Input box */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSend();
-        }}
-        className="pt-2 flex-shrink-0"
-      >
-        <div className="glass-card rounded-full p-2 pl-5 shadow-soft flex items-center border border-alabaster dark:border-white/10 focus-within:ring-2 focus-within:ring-onyx dark:focus-within:ring-white transition-all">
+        {/* Input Bar */}
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="relative flex items-center gap-2 pt-2 flex-shrink-0">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask your digital memory anything..."
-            className="w-full bg-transparent border-none outline-none text-charcoal dark:text-white placeholder:text-slate-400 text-sm"
+            placeholder={
+              focusedFile
+                ? `Ask anything about ${focusedFile.name}...`
+                : 'Ask anything about your notes, documents, or screenshots...'
+            }
+            className="flex-1 pl-4 pr-12 py-3 rounded-2xl bg-porcelain-100 dark:bg-white/5 border border-alabaster dark:border-white/10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 text-charcoal dark:text-white transition-all shadow-inner"
           />
           <button
             type="submit"
-            disabled={loading || !input.trim()}
-            className="p-2.5 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx hover:opacity-90 transition-opacity disabled:opacity-40 flex-shrink-0"
+            disabled={!input.trim() || loading}
+            className="absolute right-2 top-3.5 w-8 h-8 rounded-xl bg-onyx text-white dark:bg-white dark:text-onyx flex items-center justify-center hover:opacity-90 disabled:opacity-40 transition-all shadow-sm"
           >
             <Send size={15} />
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 };

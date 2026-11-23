@@ -13,6 +13,7 @@ export interface SearchResultItem {
   full_content: string;
   relevance_score: number;
   matched_by: string[];
+  is_bookmarked?: boolean;
 }
 
 export interface SearchResponse {
@@ -28,7 +29,51 @@ export interface ImageOCRResult {
   path: string;
   extracted_text: string;
   modified_at?: string;
+  created_at?: string;
   file_size: number;
+  relevance_score?: number;
+}
+
+export interface FolderStatsDetail {
+  folder_id: string;
+  folder_path: string;
+  total_files: number;
+  indexed_files: number;
+  total_size_bytes: number;
+  extension_counts: Record<string, number>;
+  duplicate_count: number;
+  reclaimable_bytes: number;
+  delete_suggestions_count: number;
+}
+
+export interface DuplicateFileItem {
+  id: string;
+  folder_id?: string;
+  filename: string;
+  path: string;
+  extension: string;
+  file_type: string;
+  file_size: number;
+  created_at?: string;
+  modified_at?: string;
+  is_primary: boolean;
+  reason: string;
+}
+
+export interface DuplicateGroup {
+  file_hash: string;
+  file_size: number;
+  total_copies: number;
+  reclaimable_bytes: number;
+  primary_file: DuplicateFileItem;
+  duplicates: DuplicateFileItem[];
+}
+
+export interface DuplicateSummaryResponse {
+  total_duplicate_files: number;
+  total_groups: number;
+  total_reclaimable_bytes: number;
+  groups: DuplicateGroup[];
 }
 
 export interface FileItem {
@@ -108,35 +153,118 @@ export interface ProjectItem {
   updated_at?: string;
 }
 
+export interface ConversationItem {
+  id: string;
+  title: string;
+  focused_file_id?: string | null;
+  focused_filename?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  last_message?: string | null;
+  message_count?: number;
+}
+
+export interface BookmarkItem {
+  id: string;
+  file_id: string;
+  notes?: string;
+  created_at: string;
+  filename: string;
+  path: string;
+  extension: string;
+  file_type: string;
+  file_size: number;
+}
+
+export interface TagItem {
+  id: string;
+  file_id: string;
+  tag: string;
+  created_at: string;
+}
+
 export const api = {
   // Search
-  search: async (query: string, extension?: string, fileType?: string, limit: number = 20): Promise<SearchResponse> => {
+  search: async (
+    query: string,
+    extension?: string,
+    fileType?: string,
+    limit: number = 20,
+    folderId?: string,
+    dateRange?: string,
+    onlyBookmarked?: boolean
+  ): Promise<SearchResponse> => {
     const res = await fetch(`${API_BASE}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, extension, file_type: fileType, limit }),
+      body: JSON.stringify({
+        query,
+        extension,
+        file_type: fileType,
+        limit,
+        folder_id: folderId,
+        date_range: dateRange,
+        only_bookmarked: onlyBookmarked,
+      }),
     });
     if (!res.ok) throw new Error('Search failed');
     return res.json();
   },
 
   // OCR Visual Search
-  searchOcr: async (q: string = ''): Promise<ImageOCRResult[]> => {
-    const res = await fetch(`${API_BASE}/search/ocr?q=${encodeURIComponent(q)}`);
+  searchOcr: async (q?: string, sortBy: string = 'relevance'): Promise<ImageOCRResult[]> => {
+    const params = new URLSearchParams();
+    if (q && q.trim()) params.append('q', q.trim());
+    if (sortBy) params.append('sort_by', sortBy);
+    const res = await fetch(`${API_BASE}/search/ocr?${params.toString()}`);
     if (!res.ok) throw new Error('OCR search failed');
     return res.json();
   },
 
   // Files
-  getFiles: async (extension?: string, fileType?: string, limit: number = 50, offset: number = 0): Promise<{ files: FileItem[]; total: number }> => {
+  getFiles: async (
+    extension?: string,
+    fileType?: string,
+    limit: number = 50,
+    offset: number = 0,
+    folderId?: string,
+    sortBy?: string
+  ): Promise<{ files: FileItem[]; total: number }> => {
     const params = new URLSearchParams();
     if (extension) params.append('extension', extension);
     if (fileType) params.append('file_type', fileType);
+    if (folderId) params.append('folder_id', folderId);
+    if (sortBy) params.append('sort_by', sortBy);
     params.append('limit', limit.toString());
     params.append('offset', offset.toString());
 
     const res = await fetch(`${API_BASE}/files?${params.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch files');
+    return res.json();
+  },
+
+  deleteFile: async (fileId: string, deleteFromDisk: boolean = true): Promise<any> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}?delete_from_disk=${deleteFromDisk}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to delete file' }));
+      throw new Error(err.detail || 'Failed to delete file');
+    }
+    return res.json();
+  },
+
+  getDuplicates: async (folderId?: string): Promise<DuplicateSummaryResponse> => {
+    const url = folderId ? `${API_BASE}/files/duplicates?folder_id=${encodeURIComponent(folderId)}` : `${API_BASE}/files/duplicates`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch duplicate files');
+    return res.json();
+  },
+
+  getFolderStats: async (folderId?: string): Promise<FolderStatsDetail[]> => {
+    const url = folderId ? `${API_BASE}/stats/folders?folder_id=${encodeURIComponent(folderId)}` : `${API_BASE}/stats/folders`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch folder breakdown stats');
     return res.json();
   },
 
@@ -205,6 +333,18 @@ export const api = {
     return res.json();
   },
 
+  getAutoSyncStatus: async (): Promise<any> => {
+    const res = await fetch(`${API_BASE}/index/auto_sync`);
+    if (!res.ok) throw new Error('Failed to fetch auto-sync status');
+    return res.json();
+  },
+
+  toggleAutoSync: async (): Promise<any> => {
+    const res = await fetch(`${API_BASE}/index/auto_sync/toggle`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to toggle auto-sync');
+    return res.json();
+  },
+
   clearMemory: async (): Promise<{ message: string }> => {
     const res = await fetch(`${API_BASE}/index/clear`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to clear memory');
@@ -229,6 +369,12 @@ export const api = {
   getProjects: async (): Promise<ProjectItem[]> => {
     const res = await fetch(`${API_BASE}/projects`);
     if (!res.ok) throw new Error('Failed to fetch projects');
+    return res.json();
+  },
+
+  autoDetectProjects: async (): Promise<ProjectItem[]> => {
+    const res = await fetch(`${API_BASE}/projects/auto-detect`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to auto-detect projects');
     return res.json();
   },
 
@@ -286,13 +432,100 @@ export const api = {
     return res.json();
   },
 
-  chatWithMemory: async (query: string, conversationHistory?: any[]): Promise<any> => {
+  // Assistant & Persistent Conversations
+  getConversations: async (): Promise<ConversationItem[]> => {
+    const res = await fetch(`${API_BASE}/assistant/conversations`);
+    if (!res.ok) throw new Error('Failed to fetch conversations');
+    return res.json();
+  },
+
+  createConversation: async (title?: string, focusedFileId?: string): Promise<ConversationItem> => {
+    const res = await fetch(`${API_BASE}/assistant/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, focused_file_id: focusedFileId }),
+    });
+    if (!res.ok) throw new Error('Failed to create conversation');
+    return res.json();
+  },
+
+  getConversationHistory: async (conversationId: string): Promise<{ conversation_id: string; messages: any[] }> => {
+    const res = await fetch(`${API_BASE}/assistant/conversations/${conversationId}`);
+    if (!res.ok) throw new Error('Failed to fetch conversation history');
+    return res.json();
+  },
+
+  deleteConversation: async (conversationId: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/assistant/conversations/${conversationId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete conversation');
+  },
+
+  chatWithMemory: async (
+    query: string,
+    conversationId?: string,
+    focusedFileId?: string,
+    conversationHistory?: any[]
+  ): Promise<any> => {
     const res = await fetch(`${API_BASE}/assistant/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, conversation_history: conversationHistory }),
+      body: JSON.stringify({
+        query,
+        conversation_id: conversationId,
+        focused_file_id: focusedFileId,
+        conversation_history: conversationHistory,
+      }),
     });
     if (!res.ok) throw new Error('Assistant chat failed');
     return res.json();
+  },
+
+  // Bookmarks & Tags & Recent
+  getRecentFiles: async (limit: number = 8): Promise<FileItem[]> => {
+    const res = await fetch(`${API_BASE}/files/recent?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch recent files');
+    return res.json();
+  },
+
+  getBookmarks: async (): Promise<BookmarkItem[]> => {
+    const res = await fetch(`${API_BASE}/files/bookmarks`);
+    if (!res.ok) throw new Error('Failed to fetch bookmarks');
+    return res.json();
+  },
+
+  toggleBookmark: async (fileId: string, note?: string): Promise<{ bookmarked: boolean }> => {
+    const url = note
+      ? `${API_BASE}/files/${fileId}/bookmark?note=${encodeURIComponent(note)}`
+      : `${API_BASE}/files/${fileId}/bookmark`;
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to toggle bookmark');
+    return res.json();
+  },
+
+  getTags: async (): Promise<{ tag: string; count: number }[]> => {
+    const res = await fetch(`${API_BASE}/files/tags`);
+    if (!res.ok) throw new Error('Failed to fetch tags');
+    return res.json();
+  },
+
+  getFileTags: async (fileId: string): Promise<TagItem[]> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags`);
+    if (!res.ok) throw new Error('Failed to fetch file tags');
+    return res.json();
+  },
+
+  addFileTag: async (fileId: string, tag: string): Promise<TagItem> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags?tag=${encodeURIComponent(tag)}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to add file tag');
+    return res.json();
+  },
+
+  removeFileTag: async (fileId: string, tag: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags/${encodeURIComponent(tag)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to remove tag');
   },
 };

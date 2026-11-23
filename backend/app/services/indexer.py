@@ -56,12 +56,15 @@ class IndexingService:
         if not file_path.exists() or not extractor_manager.is_supported(file_path):
             return {"status": "unsupported", "path": str(file_path)}
 
-        file_stat = file_path.stat()
-        file_type = extractor_manager.get_file_type(file_path)
-        
-        created_at = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
-        modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
-        file_size = file_stat.st_size
+        try:
+            file_stat = file_path.stat()
+            file_type = extractor_manager.get_file_type(file_path)
+            created_at = datetime.fromtimestamp(file_stat.st_ctime).isoformat()
+            modified_at = datetime.fromtimestamp(file_stat.st_mtime).isoformat()
+            file_size = file_stat.st_size
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Skipping locked or unreadable file {file_path}: {e}")
+            return {"status": "failed", "path": str(file_path), "error": str(e)}
 
         # Check existing record
         existing = DatabaseRepository.get_file_by_path(str(file_path))
@@ -226,5 +229,82 @@ class IndexingService:
             self.current_progress["current_file"] = None
 
         return self.current_progress
+
+    def start_background_watcher(self, poll_interval_seconds: int = 20):
+        """Starts a background daemon thread that periodically scans monitored folders for changes."""
+        import threading
+        if hasattr(self, "_watcher_thread") and self._watcher_thread and self._watcher_thread.is_alive():
+            return
+        self.auto_sync_enabled = True
+        self.last_auto_sync = None
+        self.auto_sync_count = 0
+        self._stop_watcher = threading.Event()
+        self._watcher_thread = threading.Thread(
+            target=self._watcher_loop,
+            args=(poll_interval_seconds,),
+            daemon=True,
+            name="SearchMyWorld-FolderWatcher"
+        )
+        self._watcher_thread.start()
+        logger.info(f"Started SearchMyWorld Background Folder Auto-Watcher (poll every {poll_interval_seconds}s).")
+
+    def stop_background_watcher(self):
+        if hasattr(self, "_stop_watcher"):
+            self._stop_watcher.set()
+
+    def get_auto_sync_status(self) -> Dict[str, Any]:
+        folders = DatabaseRepository.get_folders()
+        return {
+            "auto_sync_enabled": getattr(self, "auto_sync_enabled", True),
+            "is_indexing": self.is_indexing,
+            "last_auto_sync": getattr(self, "last_auto_sync", None),
+            "auto_sync_count": getattr(self, "auto_sync_count", 0),
+            "monitored_folders": len(folders)
+        }
+
+    def _watcher_loop(self, poll_interval: int):
+        import time
+        while not self._stop_watcher.is_set():
+            time.sleep(poll_interval)
+            if not getattr(self, "auto_sync_enabled", True) or self.is_indexing:
+                continue
+
+            try:
+                folders = DatabaseRepository.get_folders()
+                changed_or_new = []
+
+                for folder in folders:
+                    if not folder.get("indexing_enabled", True):
+                        continue
+                    folder_path = Path(folder["path"])
+                    if not folder_path.exists():
+                        continue
+
+                    # Scan for new or modified files (fast directory pruning to avoid heavy node_modules/.git polling)
+                    for root, dirs, filenames in os.walk(folder_path):
+                        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith('.')]
+                        for fname in filenames:
+                            fp = Path(root) / fname
+                            if not extractor_manager.is_supported(fp):
+                                continue
+                            try:
+                                mtime = datetime.fromtimestamp(fp.stat().st_mtime).isoformat()
+                                existing = DatabaseRepository.get_file_by_path(str(fp))
+                                if not existing or existing.get("modified_at") != mtime or existing.get("indexing_status") != "indexed":
+                                    changed_or_new.append((fp, folder["id"]))
+                            except Exception:
+                                continue
+
+                for fp, f_id in changed_or_new:
+                    if self._stop_watcher.is_set():
+                        break
+                    res = self.scan_and_index_file(fp, folder_id=f_id)
+                    if res.get("status") == "indexed":
+                        self.auto_sync_count = getattr(self, "auto_sync_count", 0) + 1
+                        logger.info(f"[Auto-Watcher] Automatically indexed: {fp.name}")
+
+                self.last_auto_sync = datetime.now().isoformat()
+            except Exception as e:
+                logger.debug(f"[Auto-Watcher] Exception in watcher loop: {e}")
 
 indexing_service = IndexingService()
