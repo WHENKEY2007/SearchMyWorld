@@ -271,15 +271,21 @@ class DatabaseRepository:
 
     # ------------------ TIMELINE ------------------
     @staticmethod
-    def get_timeline(limit: int = 100) -> List[Dict[str, Any]]:
+    def get_timeline(limit: int = 100, date_type: str = "modified") -> List[Dict[str, Any]]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            order_col = "modified_at"
+            if date_type == "created":
+                order_col = "created_at"
+            elif date_type == "indexed":
+                order_col = "indexed_at"
+
             cursor.execute(
-                """
+                f"""
                 SELECT id, filename, path, extension, file_type, file_size, created_at, modified_at, indexed_at
                 FROM files
                 WHERE indexing_status = 'indexed'
-                ORDER BY COALESCE(modified_at, created_at, indexed_at) DESC
+                ORDER BY COALESCE({order_col}, modified_at, created_at, indexed_at) DESC
                 LIMIT ?
                 """,
                 (limit,)

@@ -73,19 +73,25 @@ export interface IndexingStatus {
   status: string;
 }
 
+export interface TimelineItem {
+  file_id: string;
+  filename: string;
+  path: string;
+  extension: string;
+  file_type: string;
+  file_size: number;
+  event_date: string;
+  modified_date?: string;
+  created_date?: string;
+  indexed_date?: string;
+  inferred_date?: string | null;
+  raw_date?: string;
+  indexing_status: string;
+}
+
 export interface TimelinePeriod {
   period: string;
-  items: Array<{
-    file_id: string;
-    filename: string;
-    path: string;
-    extension: string;
-    file_type: string;
-    file_size: number;
-    event_date: string;
-    raw_date?: string;
-    indexing_status: string;
-  }>;
+  items: TimelineItem[];
 }
 
 export interface ProjectItem {
@@ -194,8 +200,8 @@ export const api = {
   },
 
   // Timeline
-  getTimeline: async (limit: number = 100): Promise<{ timeline: TimelinePeriod[]; total_items: number }> => {
-    const res = await fetch(`${API_BASE}/timeline?limit=${limit}`);
+  getTimeline: async (limit: number = 100, dateType: string = 'modified'): Promise<{ date_type: string; timeline: TimelinePeriod[]; total_items: number }> => {
+    const res = await fetch(`${API_BASE}/timeline?limit=${limit}&date_type=${dateType}`);
     if (!res.ok) throw new Error('Failed to fetch timeline');
     return res.json();
   },
