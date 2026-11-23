@@ -287,6 +287,7 @@ class DatabaseRepository:
             return ocr_id
 
     @staticmethod
+    @staticmethod
     def search_image_ocr(
         query: Optional[str] = None,
         sort_by: str = "relevance",

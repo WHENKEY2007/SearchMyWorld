@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, Calendar, FileText, Sparkles, Edit3, PlusCircle, CheckCircle2 } from 'lucide-react';
 import { api, TimelinePeriod, TimelineItem } from '../api/client';
+import { TiltCard } from '../components/TiltCard';
 
 export const MyTimeline: React.FC = () => {
   const [timeline, setTimeline] = useState<TimelinePeriod[]>([]);
@@ -119,7 +120,7 @@ export const MyTimeline: React.FC = () => {
               {/* Items in this period */}
               <div className="grid grid-cols-1 gap-3">
                 {group.items.map((item) => (
-                  <div
+                  <TiltCard
                     key={item.file_id}
                     onClick={() => handleOpenFile(item.file_id)}
                     className="glass-card rounded-2xl p-4 shadow-soft border border-alabaster dark:border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:shadow-soft-lg hover:border-purple-300 dark:hover:border-purple-600 transition-all cursor-pointer group"
@@ -172,7 +173,7 @@ export const MyTimeline: React.FC = () => {
                         {openingId === item.file_id ? 'Opening...' : 'Open File ↗'}
                       </span>
                     </div>
-                  </div>
+                  </TiltCard>
                 ))}
               </div>
             </div>

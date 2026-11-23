@@ -19,6 +19,7 @@ import {
 import { api, SearchResultItem } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { FileActionMenu } from '../components/FileActionMenu';
+import { TiltCard } from '../components/TiltCard';
 
 const SAMPLE_QUERIES = [
   'Support Vector Machines classification',
@@ -247,7 +248,7 @@ export const SmartSearch: React.FC = () => {
             const primarySnippet = res.snippets[0] || res.snippet;
 
             return (
-              <div
+              <TiltCard
                 key={res.file_id}
                 className="glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-lg hover:border-purple-300 dark:hover:border-purple-500/40 transition-all border border-alabaster dark:border-white/10 group space-y-3"
               >
@@ -369,7 +370,7 @@ export const SmartSearch: React.FC = () => {
                     </p>
                   </div>
                 )}
-              </div>
+              </TiltCard>
             );
           });
         })()}

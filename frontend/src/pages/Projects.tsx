@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FolderGit2, Plus, FileText, CheckCircle2, AlertCircle, ArrowRight, Trash2 } from 'lucide-react';
 import { api, ProjectItem } from '../api/client';
 import { Link } from 'react-router-dom';
+import { TiltCard } from '../components/TiltCard';
 
 export const Projects: React.FC = () => {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -97,7 +98,7 @@ export const Projects: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {projects.map((proj) => (
-            <div
+            <TiltCard
               key={proj.id}
               className="glass-card rounded-2xl p-6 shadow-soft border border-alabaster dark:border-white/10 flex flex-col justify-between space-y-4 hover:shadow-soft-lg transition-all group"
             >
@@ -133,7 +134,7 @@ export const Projects: React.FC = () => {
                   Reconstruct <ArrowRight size={13} />
                 </Link>
               </div>
-            </div>
+            </TiltCard>
           ))}
         </div>
       )}

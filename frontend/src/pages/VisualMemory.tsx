@@ -6,6 +6,7 @@ import {
   Copy,
   Check,
   FileSearch,
+  Sparkles,
   Eye,
   ChevronDown,
   LayoutGrid,
@@ -16,7 +17,6 @@ import {
   Maximize2,
   Minimize2,
   Calendar,
-  Sparkles,
   ArrowUpDown,
   X,
   PanelRight,
@@ -24,10 +24,12 @@ import {
   Download,
   Clock,
   HardDrive,
+  RefreshCw,
 } from 'lucide-react';
 import { api, ImageOCRResult } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { FileActionMenu } from '../components/FileActionMenu';
+import { TiltCard } from '../components/TiltCard';
 
 type ViewMode =
   | 'extra-large'
@@ -51,9 +53,9 @@ export const VisualMemory: React.FC = () => {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ImageOCRResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
 
   // View Options (Matching Windows File Explorer Menu)
   const [viewMode, setViewMode] = useState<ViewMode>('large');
@@ -86,71 +88,57 @@ export const VisualMemory: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch initial image OCR memories
-  useEffect(() => {
-    const fetchInitial = async () => {
-      setLoading(true);
-      try {
-        const data = await api.searchOcr('', sortMode);
-        setResults(data);
-        if (data.length > 0) {
-          setSelectedItem(data[0]);
-        }
-      } catch (err) {
-        console.error('Failed to load initial screenshots', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchInitial();
-  }, []);
-
-  const handleSearch = async (e?: React.FormEvent, customQ?: string) => {
+  const handleSearch = async (e?: React.FormEvent, customQ?: string, customSort?: SortMode) => {
     if (e) e.preventDefault();
     const q = customQ !== undefined ? customQ : query;
-
+    const s = customSort !== undefined ? customSort : sortMode;
     setLoading(true);
-    setSearched(true);
     try {
-      const data = await api.searchOcr(q, sortMode);
+      const data = await api.searchOcr(q, s);
       setResults(data);
       if (data.length > 0) {
         setSelectedItem(data[0]);
       }
     } catch (err) {
-      console.error(err);
-      alert('Visual OCR search failed');
+      console.error('Visual OCR search failed', err);
     } finally {
       setLoading(false);
     }
   };
+
+  // Fetch initial image OCR memories
+  useEffect(() => {
+    handleSearch(undefined, '', 'relevance');
+  }, []);
 
   const handleSortChange = async (newSort: SortMode) => {
     setSortMode(newSort);
     setSortDropdownOpen(false);
-    setLoading(true);
-    try {
-      const data = await api.searchOcr(query, newSort);
-      setResults(data);
-      if (data.length > 0 && !data.some((d) => d.id === selectedItem?.id)) {
-        setSelectedItem(data[0]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    handleSearch(undefined, query, newSort);
   };
 
   const handleOpenFile = async (fileId: string) => {
+    setOpeningId(fileId);
     try {
       await api.openFile(fileId);
     } catch (e: any) {
       alert(e.message);
+    } finally {
+      setTimeout(() => setOpeningId(null), 800);
     }
   };
 
-  const handleCopyText = (text: string, id: string) => {
+  const handleCopyText = (textOrEvent: React.MouseEvent | string, textOrId?: string, idParam?: string) => {
+    let text = '';
+    let id = '';
+    if (typeof textOrEvent === 'string') {
+      text = textOrEvent;
+      id = textOrId || '';
+    } else {
+      textOrEvent.stopPropagation();
+      text = textOrId || '';
+      id = idParam || '';
+    }
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -162,53 +150,77 @@ export const VisualMemory: React.FC = () => {
     'Database error',
     'Terminal error',
     'React Dashboard',
+    'Architecture',
+    'Theme',
+    'Certificate',
   ];
 
   return (
     <div className="max-w-7xl mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="text-center space-y-3">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-pastel-mintBorder bg-pastel-mint/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
+          <Sparkles size={13} /> On-Device RapidOCR Vision
+        </div>
         <h1 className="text-4xl md:text-5xl font-serif text-charcoal dark:text-white tracking-tight">
-          Visual <span className="italic font-normal">Memory Search.</span>
+          Visual <span className="italic font-normal">Memory & Screenshots.</span>
         </h1>
-        <p className="text-sm text-slate-500 max-w-lg mx-auto">
-          Find screenshots, error screens, and diagrams with high-resolution image previews and OCR search.
+        <p className="text-sm text-slate-500 max-w-xl mx-auto">
+          Every screenshot, diagram, and picture scanned on your computer is searchable by the visible words inside it with high-resolution previews.
         </p>
       </div>
 
       {/* OCR Search Bar */}
       <form onSubmit={(e) => handleSearch(e)} className="relative max-w-3xl mx-auto">
-        <div className="glass-card rounded-full p-2 pl-6 shadow-soft flex items-center border border-alabaster dark:border-white/10 focus-within:ring-2 focus-within:ring-onyx dark:focus-within:ring-white transition-all">
+        <div className="glass-card rounded-full p-2 pl-6 shadow-soft flex items-center border border-alabaster dark:border-white/10 focus-within:ring-2 focus-within:ring-purple-400 dark:focus-within:ring-purple-500 transition-all">
           <Search size={20} className="text-slate-400 mr-3 flex-shrink-0" />
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search text in screenshots (e.g., 'install', 'pip', 'error')"
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (!e.target.value.trim()) {
+                handleSearch(undefined, '');
+              }
+            }}
+            placeholder="Search words inside your screenshots, certificates, or diagrams..."
             className="w-full bg-transparent border-none outline-none text-charcoal dark:text-white placeholder:text-slate-400 text-sm"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                handleSearch(undefined, '');
+              }}
+              className="px-2 text-xs text-slate-400 hover:text-charcoal dark:hover:text-white mr-1"
+            >
+              Clear
+            </button>
+          )}
           <button
             type="submit"
             disabled={loading}
             className="px-6 py-2.5 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx font-medium text-xs hover:opacity-90 transition-opacity shadow-sm flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
           >
-            <ImageIcon size={14} />
+            {loading ? <RefreshCw size={13} className="animate-spin" /> : <ImageIcon size={14} />}
             Search Images
           </button>
         </div>
       </form>
 
-      {/* Suggestion tags */}
+      {/* Suggestion tags from user's actual files */}
       <div className="flex items-center justify-center gap-2 flex-wrap text-xs text-slate-500">
-        <span>Try searching:</span>
+        <span className="font-medium">Found in your screenshots:</span>
         {sampleOCRQueries.map((s) => (
           <button
             key={s}
+            type="button"
             onClick={() => {
               setQuery(s);
               handleSearch(undefined, s);
             }}
-            className="px-2.5 py-1 rounded-full border border-alabaster dark:border-white/10 hover:text-onyx dark:hover:text-white transition-colors"
+            className="px-3 py-1 rounded-full border border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-purple-300 dark:hover:border-purple-600 hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
           >
             "{s}"
           </button>

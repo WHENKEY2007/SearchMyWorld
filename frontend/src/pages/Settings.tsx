@@ -10,7 +10,12 @@ import {
   Sun,
   HardDrive,
   AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  Square,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api, FolderItem, IndexingStatus } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 
@@ -44,7 +49,9 @@ export const Settings: React.FC = () => {
   useEffect(() => {
     loadFolders();
     loadStatus();
-  }, []);
+    const interval = setInterval(loadStatus, status?.status === 'indexing' ? 800 : 3500);
+    return () => clearInterval(interval);
+  }, [status?.status]);
 
   const handleAddFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +101,16 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const handleStopIndexing = async () => {
+    try {
+      await api.stopIndexing();
+      setMsg('Stopping indexing... Current file finishing up.');
+      setTimeout(loadStatus, 500);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleClearMemory = async () => {
     if (
       !confirm(
@@ -130,6 +147,104 @@ export const Settings: React.FC = () => {
         </div>
       )}
 
+      {/* Real-time Indexing Monitor Card */}
+      {status && (status.status === 'indexing' || (status.processed_files && status.processed_files > 0)) && (
+        <div className="glass-card rounded-3xl p-6 shadow-soft space-y-4 border border-alabaster dark:border-white/10 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className={`w-3 h-3 rounded-full ${status.status === 'indexing' ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+              <h2 className="text-lg font-serif font-bold text-charcoal dark:text-white">
+                {status.status === 'indexing' ? 'Indexing In Progress...' : 'Indexing Complete'}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-porcelain-200 dark:bg-white/10 text-slate-700 dark:text-slate-200">
+                {status.status === 'indexing' 
+                  ? `${Math.min(100, Math.round(((status.processed_files || 0) / Math.max(1, status.total_files_discovered || 1)) * 100))}%` 
+                  : '100% Synced'}
+              </span>
+              {status.status === 'indexing' && (
+                <button
+                  onClick={handleStopIndexing}
+                  className="flex items-center gap-1 px-3 py-1 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-sm active:scale-95"
+                  title="Stop indexing process immediately"
+                >
+                  <Square size={10} className="fill-current" />
+                  Stop
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="w-full bg-porcelain-200 dark:bg-white/10 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-2.5 rounded-full transition-all duration-300"
+                style={{
+                  width: `${status.status === 'indexing'
+                    ? Math.max(5, Math.min(100, Math.round(((status.processed_files || 0) / Math.max(1, status.total_files_discovered || 1)) * 100)))
+                    : 100}%`
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span>Files Scanned: <strong>{status.processed_files}</strong> of {status.total_files_discovered}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">✓ {status.indexed_files} Indexed</span>
+                <span className="text-slate-400">↷ {status.skipped_files} Unchanged</span>
+                {status.failed_files > 0 && <span className="text-red-500 font-medium">✗ {status.failed_files} Failed</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Currently Scanning */}
+          {status.status === 'indexing' && status.current_file && (
+            <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 truncate">
+                <RefreshCw size={13} className="animate-spin flex-shrink-0 text-amber-600" />
+                <span className="font-semibold">Extracting & Vectorizing:</span>
+                <span className="font-mono truncate">{status.current_file}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Files List */}
+          {status.recent_files && status.recent_files.length > 0 && (
+            <div className="space-y-2 pt-1 border-t border-alabaster dark:border-white/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Recently Processed Files
+                </span>
+                <Link to="/files" className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
+                  View All Indexed Files <ArrowRight size={12} />
+                </Link>
+              </div>
+
+              <div className="max-h-36 overflow-y-auto divide-y divide-alabaster dark:divide-white/5 space-y-1 text-xs">
+                {status.recent_files.slice(0, 8).map((f, i) => (
+                  <div key={i} className="py-1.5 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 truncate">
+                      {f.status === 'indexed' ? (
+                        <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
+                      ) : f.status === 'skipped' ? (
+                        <Clock size={14} className="text-slate-400 flex-shrink-0" />
+                      ) : (
+                        <AlertTriangle size={14} className="text-red-500 flex-shrink-0" />
+                      )}
+                      <span className="font-medium text-charcoal dark:text-white truncate">{f.filename}</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400 flex-shrink-0">
+                      {f.status === 'indexed' ? 'Indexed into memory' : f.status === 'skipped' ? 'Already in index' : 'Error parsing'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 1. Monitored Folders */}
       <div className="glass-card rounded-3xl p-6 shadow-soft space-y-5 border border-alabaster dark:border-white/10">
         <div className="flex items-center justify-between">
@@ -141,13 +256,24 @@ export const Settings: React.FC = () => {
               Only explicitly selected folders are scanned. Original documents are never moved or modified.
             </p>
           </div>
-          <button
-            onClick={handleStartIndexing}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold hover:opacity-90 transition-opacity"
-          >
-            <RefreshCw size={13} />
-            Scan & Index All
-          </button>
+          {status?.status === 'indexing' ? (
+            <button
+              onClick={handleStopIndexing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all shadow-sm active:scale-95 animate-pulse"
+              title="Stop indexing process"
+            >
+              <Square size={12} className="fill-current" />
+              Stop Indexing
+            </button>
+          ) : (
+            <button
+              onClick={handleStartIndexing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx text-xs font-semibold hover:opacity-90 transition-opacity"
+            >
+              <RefreshCw size={13} />
+              Scan & Index All
+            </button>
+          )}
         </div>
 
         {/* Add Folder Form */}
@@ -225,9 +351,11 @@ export const Settings: React.FC = () => {
           </div>
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-xs font-semibold text-charcoal dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-alabaster dark:border-white/10 bg-white/70 dark:bg-white/5 text-xs font-semibold text-charcoal dark:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all duration-300 transform active:scale-95"
           >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+            <div className="transition-transform duration-300 transform rotate-0 dark:rotate-180">
+              {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
+            </div>
             Toggle Mode
           </button>
         </div>

@@ -115,6 +115,12 @@ export interface IndexingStatus {
   failed_files: number;
   current_file?: string;
   status: string;
+  recent_files?: Array<{
+    filename: string;
+    extension: string;
+    status: string;
+    time: string;
+  }>;
 }
 
 export interface TimelineItem {
@@ -276,6 +282,12 @@ export const api = {
   startIndexing: async (): Promise<{ message: string; status: string }> => {
     const res = await fetch(`${API_BASE}/index/start`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to start indexing');
+    return res.json();
+  },
+
+  stopIndexing: async (): Promise<{ message: string; status: string }> => {
+    const res = await fetch(`${API_BASE}/index/stop`, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to stop indexing');
     return res.json();
   },
 

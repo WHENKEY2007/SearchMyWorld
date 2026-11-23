@@ -134,3 +134,4 @@ class IndexingProgressResponse(BaseModel):
     failed_files: int
     current_file: Optional[str] = None
     status: str
+    recent_files: Optional[List[Dict[str, Any]]] = None

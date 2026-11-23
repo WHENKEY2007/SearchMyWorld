@@ -31,6 +31,7 @@ import {
   DuplicateSummaryResponse,
   DuplicateGroup,
 } from '../api/client';
+import { TiltCard } from '../components/TiltCard';
 
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -283,9 +284,9 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 4 Primary Metric Cards */}
+      {/* 4 Metric Cards with Subtle 3D Perspective Tilt */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="glass-card rounded-2xl p-5 shadow-soft border-pastel-lilacBorder/40">
+        <TiltCard className="glass-card rounded-2xl p-5 shadow-soft border-pastel-lilacBorder/40">
           <div className="flex items-center justify-between text-slate-500 mb-3">
             <span className="text-xs uppercase tracking-wider font-semibold">Total Memories</span>
             <div className="w-8 h-8 rounded-full bg-pastel-lilac flex items-center justify-center text-purple-700">
@@ -296,9 +297,9 @@ export const Dashboard: React.FC = () => {
             {loading ? '...' : stats?.total_chunks || 0}
           </p>
           <p className="text-xs text-slate-500 mt-1">Searchable text chunks indexed</p>
-        </div>
+        </TiltCard>
 
-        <div className="glass-card rounded-2xl p-5 shadow-soft border-pastel-peachBorder/40">
+        <TiltCard className="glass-card rounded-2xl p-5 shadow-soft border-pastel-peachBorder/40">
           <div className="flex items-center justify-between text-slate-500 mb-3">
             <span className="text-xs uppercase tracking-wider font-semibold">Indexed Files</span>
             <div className="w-8 h-8 rounded-full bg-pastel-peach flex items-center justify-center text-amber-700">
@@ -309,9 +310,9 @@ export const Dashboard: React.FC = () => {
             {loading ? '...' : stats?.indexed_files || 0}
           </p>
           <p className="text-xs text-slate-500 mt-1">PDFs, Docs, Slides, and Text</p>
-        </div>
+        </TiltCard>
 
-        <div className="glass-card rounded-2xl p-5 shadow-soft border-pastel-mintBorder/40">
+        <TiltCard className="glass-card rounded-2xl p-5 shadow-soft border-pastel-mintBorder/40">
           <div className="flex items-center justify-between text-slate-500 mb-3">
             <span className="text-xs uppercase tracking-wider font-semibold">Visual OCR</span>
             <div className="w-8 h-8 rounded-full bg-pastel-mint flex items-center justify-center text-emerald-800">
@@ -322,9 +323,9 @@ export const Dashboard: React.FC = () => {
             {loading ? '...' : stats?.total_images_ocr || 0}
           </p>
           <p className="text-xs text-slate-500 mt-1">Screenshots & scanned images</p>
-        </div>
+        </TiltCard>
 
-        <div className="glass-card rounded-2xl p-5 shadow-soft border-alabaster">
+        <TiltCard className="glass-card rounded-2xl p-5 shadow-soft border-alabaster">
           <div className="flex items-center justify-between text-slate-500 mb-3">
             <span className="text-xs uppercase tracking-wider font-semibold">Folders Monitored</span>
             <div className="w-8 h-8 rounded-full bg-porcelain-200 dark:bg-white/10 flex items-center justify-center text-slate-700 dark:text-slate-200">
@@ -335,7 +336,7 @@ export const Dashboard: React.FC = () => {
             {loading ? '...' : stats?.total_folders || 0}
           </p>
           <p className="text-xs text-slate-500 mt-1">Configured local directories</p>
-        </div>
+        </TiltCard>
       </div>
 
       {/* ============================================================== */}
