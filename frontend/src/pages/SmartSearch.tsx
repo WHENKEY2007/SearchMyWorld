@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   ExternalLink,
@@ -15,9 +15,12 @@ import {
   Calendar,
   ArrowUpDown,
   Download,
+  Folder,
+  Star,
+  Bookmark,
 } from 'lucide-react';
-import { api, SearchResultItem } from '../api/client';
-import { useNavigate } from 'react-router-dom';
+import { api, SearchResultItem, FolderItem } from '../api/client';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileActionMenu } from '../components/FileActionMenu';
 import { TiltCard } from '../components/TiltCard';
 
@@ -31,11 +34,17 @@ const SAMPLE_QUERIES = [
 
 export const SmartSearch: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [selectedExtension, setSelectedExtension] = useState<string | undefined>(undefined);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
+  const [selectedDateRange, setSelectedDateRange] = useState<string | undefined>(undefined);
+  const [onlyBookmarked, setOnlyBookmarked] = useState<boolean>(false);
+  const [starredFileIds, setStarredFileIds] = useState<Set<string>>(new Set());
   const [openingId, setOpeningId] = useState<string | null>(null);
 
   // In-App Document Preview Modal
@@ -51,21 +60,64 @@ export const SmartSearch: React.FC = () => {
   // Sorting and Filtering
   const [sortOrder, setSortOrder] = useState<'relevance' | 'filename'>('relevance');
 
-  const handleSearch = async (e?: React.FormEvent, customQuery?: string) => {
+  useEffect(() => {
+    api.getFolders().then(setFolders).catch(console.error);
+    const initialQ = searchParams.get('q');
+    if (initialQ) {
+      setQuery(initialQ);
+      handleSearch(undefined, initialQ);
+    }
+  }, []);
+
+  const handleSearch = async (
+    e?: React.FormEvent,
+    customQuery?: string,
+    customExt?: string,
+    customFolder?: string,
+    customDate?: string,
+    customOnlyBookmarked?: boolean
+  ) => {
     if (e) e.preventDefault();
     const q = customQuery !== undefined ? customQuery : query;
     if (!q.trim()) return;
 
+    const ext = customExt !== undefined ? customExt : selectedExtension;
+    const folder = customFolder !== undefined ? customFolder : selectedFolderId;
+    const date = customDate !== undefined ? customDate : selectedDateRange;
+    const bookmarked = customOnlyBookmarked !== undefined ? customOnlyBookmarked : onlyBookmarked;
+
     setLoading(true);
     setSearched(true);
     try {
-      const data = await api.search(q, selectedExtension);
+      const data = await api.search(q, ext, undefined, 30, folder, date, bookmarked);
       setResults(data.results);
+      const bookmarkedIds = new Set<string>(
+        data.results.filter((r) => r.is_bookmarked).map((r) => r.file_id)
+      );
+      setStarredFileIds(bookmarkedIds);
     } catch (err) {
       console.error(err);
       alert('Search failed. Ensure backend is running.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleBookmark = async (e: React.MouseEvent, fileId: string) => {
+    e.stopPropagation();
+    try {
+      const res = await api.toggleBookmark(fileId);
+      setStarredFileIds((prev) => {
+        const next = new Set(prev);
+        if (res.bookmarked) {
+          next.add(fileId);
+        } else {
+          next.delete(fileId);
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -160,7 +212,7 @@ export const SmartSearch: React.FC = () => {
               onClick={() => {
                 setSelectedExtension(tab.ext);
                 if (query.trim()) {
-                  api.search(query, tab.ext).then((res) => setResults(res.results));
+                  handleSearch(undefined, query, tab.ext);
                 }
               }}
               className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
@@ -172,6 +224,75 @@ export const SmartSearch: React.FC = () => {
               {tab.label}
             </button>
           ))}
+        </div>
+
+        {/* Advanced Filters: Folder, Date Range, Starred Only */}
+        <div className="flex items-center justify-center flex-wrap gap-2 pt-1 text-xs">
+          {/* Folder selector */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5 text-charcoal dark:text-white">
+            <Folder size={12} className="text-slate-400" />
+            <select
+              value={selectedFolderId || ''}
+              onChange={(e) => {
+                const val = e.target.value || undefined;
+                setSelectedFolderId(val);
+                if (query.trim()) handleSearch(undefined, query, selectedExtension, val);
+              }}
+              className="bg-transparent border-none outline-none text-xs text-charcoal dark:text-white cursor-pointer"
+            >
+              <option value="" className="bg-white dark:bg-onyx text-charcoal dark:text-white">All Folders</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id} className="bg-white dark:bg-onyx text-charcoal dark:text-white">
+                  {f.path.split(/[/\\]/).filter(Boolean).pop() || f.path}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date range chips */}
+          <div className="flex items-center gap-1 p-0.5 rounded-full border border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5">
+            {[
+              { label: 'All Time', val: undefined },
+              { label: '24h', val: '24h' },
+              { label: '7d', val: '7d' },
+              { label: '30d', val: '30d' },
+              { label: '1y', val: '1y' },
+            ].map((d) => (
+              <button
+                key={d.label}
+                type="button"
+                onClick={() => {
+                  setSelectedDateRange(d.val);
+                  if (query.trim()) handleSearch(undefined, query, selectedExtension, selectedFolderId, d.val);
+                }}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                  selectedDateRange === d.val
+                    ? 'bg-onyx text-white dark:bg-white dark:text-onyx shadow-sm'
+                    : 'text-slate-500 hover:text-charcoal dark:hover:text-white'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Starred Only Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !onlyBookmarked;
+              setOnlyBookmarked(next);
+              if (query.trim()) handleSearch(undefined, query, selectedExtension, selectedFolderId, selectedDateRange, next);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+              onlyBookmarked
+                ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 shadow-sm'
+                : 'border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5 text-slate-500 hover:text-charcoal dark:hover:text-white'
+            }`}
+          >
+            <Star size={12} className={onlyBookmarked ? 'fill-amber-500 text-amber-500' : 'text-slate-400'} />
+            <span>Starred Only</span>
+          </button>
         </div>
 
         {/* Suggestion Pills */}
@@ -302,6 +423,21 @@ export const SmartSearch: React.FC = () => {
 
                   {/* Quick Action Buttons */}
                   <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={(e) => handleToggleBookmark(e, res.file_id)}
+                      className="p-1.5 rounded-xl border border-alabaster dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                      title={starredFileIds.has(res.file_id) ? 'Remove star' : 'Star this memory'}
+                    >
+                      <Star
+                        size={14}
+                        className={
+                          starredFileIds.has(res.file_id)
+                            ? 'fill-amber-500 text-amber-500'
+                            : 'text-slate-400 hover:text-amber-500'
+                        }
+                      />
+                    </button>
+
                     <button
                       onClick={() =>
                         navigate(

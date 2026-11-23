@@ -13,6 +13,7 @@ export interface SearchResultItem {
   full_content: string;
   relevance_score: number;
   matched_by: string[];
+  is_bookmarked?: boolean;
 }
 
 export interface SearchResponse {
@@ -163,13 +164,48 @@ export interface ConversationItem {
   message_count?: number;
 }
 
+export interface BookmarkItem {
+  id: string;
+  file_id: string;
+  notes?: string;
+  created_at: string;
+  filename: string;
+  path: string;
+  extension: string;
+  file_type: string;
+  file_size: number;
+}
+
+export interface TagItem {
+  id: string;
+  file_id: string;
+  tag: string;
+  created_at: string;
+}
+
 export const api = {
   // Search
-  search: async (query: string, extension?: string, fileType?: string, limit: number = 20): Promise<SearchResponse> => {
+  search: async (
+    query: string,
+    extension?: string,
+    fileType?: string,
+    limit: number = 20,
+    folderId?: string,
+    dateRange?: string,
+    onlyBookmarked?: boolean
+  ): Promise<SearchResponse> => {
     const res = await fetch(`${API_BASE}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, extension, file_type: fileType, limit }),
+      body: JSON.stringify({
+        query,
+        extension,
+        file_type: fileType,
+        limit,
+        folder_id: folderId,
+        date_range: dateRange,
+        only_bookmarked: onlyBookmarked,
+      }),
     });
     if (!res.ok) throw new Error('Search failed');
     return res.json();
@@ -442,5 +478,54 @@ export const api = {
     });
     if (!res.ok) throw new Error('Assistant chat failed');
     return res.json();
+  },
+
+  // Bookmarks & Tags & Recent
+  getRecentFiles: async (limit: number = 8): Promise<FileItem[]> => {
+    const res = await fetch(`${API_BASE}/files/recent?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch recent files');
+    return res.json();
+  },
+
+  getBookmarks: async (): Promise<BookmarkItem[]> => {
+    const res = await fetch(`${API_BASE}/files/bookmarks`);
+    if (!res.ok) throw new Error('Failed to fetch bookmarks');
+    return res.json();
+  },
+
+  toggleBookmark: async (fileId: string, note?: string): Promise<{ bookmarked: boolean }> => {
+    const url = note
+      ? `${API_BASE}/files/${fileId}/bookmark?note=${encodeURIComponent(note)}`
+      : `${API_BASE}/files/${fileId}/bookmark`;
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error('Failed to toggle bookmark');
+    return res.json();
+  },
+
+  getTags: async (): Promise<{ tag: string; count: number }[]> => {
+    const res = await fetch(`${API_BASE}/files/tags`);
+    if (!res.ok) throw new Error('Failed to fetch tags');
+    return res.json();
+  },
+
+  getFileTags: async (fileId: string): Promise<TagItem[]> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags`);
+    if (!res.ok) throw new Error('Failed to fetch file tags');
+    return res.json();
+  },
+
+  addFileTag: async (fileId: string, tag: string): Promise<TagItem> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags?tag=${encodeURIComponent(tag)}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to add file tag');
+    return res.json();
+  },
+
+  removeFileTag: async (fileId: string, tag: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/tags/${encodeURIComponent(tag)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to remove tag');
   },
 };

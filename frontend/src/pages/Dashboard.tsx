@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
   Image as ImageIcon,
@@ -22,6 +22,9 @@ import {
   ChevronRight,
   FileCheck2,
   Eye,
+  Star,
+  Clock,
+  Bookmark,
 } from 'lucide-react';
 import {
   api,
@@ -30,12 +33,17 @@ import {
   FolderStatsDetail,
   DuplicateSummaryResponse,
   DuplicateGroup,
+  BookmarkItem,
 } from '../api/client';
 import { TiltCard } from '../components/TiltCard';
+import { FileActionMenu } from '../components/FileActionMenu';
 
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
+  const [spotlightQuery, setSpotlightQuery] = useState('');
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [recentFiles, setRecentFiles] = useState<FileItem[]>([]);
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [folderStats, setFolderStats] = useState<FolderStatsDetail[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const [duplicates, setDuplicates] = useState<DuplicateSummaryResponse | null>(null);
@@ -60,20 +68,41 @@ export const Dashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsData, filesData, foldersData, dupData] = await Promise.all([
+      const [statsData, recentData, foldersData, dupData, bookmarkData] = await Promise.all([
         api.getStats(),
-        api.getFiles(undefined, undefined, 6, 0),
+        api.getRecentFiles(8).catch(() => []),
         api.getFolderStats(),
         api.getDuplicates(),
+        api.getBookmarks().catch(() => []),
       ]);
       setStats(statsData);
-      setRecentFiles(filesData.files);
+      setRecentFiles(recentData);
       setFolderStats(foldersData);
       setDuplicates(dupData);
+      setBookmarks(bookmarkData);
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatTimeAgo = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return '';
     }
   };
 
@@ -265,21 +294,56 @@ export const Dashboard: React.FC = () => {
           screenshot, decision, and project evolution.
         </p>
 
-        {/* Quick Launch Buttons */}
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <Link
-            to="/search"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx font-medium text-sm hover:opacity-90 transition-opacity shadow-md"
-          >
-            <Search size={16} />
-            Search My World
-          </Link>
+        {/* Universal Spotlight Search Bar */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (spotlightQuery.trim()) {
+              navigate(`/search?q=${encodeURIComponent(spotlightQuery.trim())}`);
+            } else {
+              navigate('/search');
+            }
+          }}
+          className="relative max-w-2xl mx-auto pt-2"
+        >
+          <div className="glass-card rounded-full p-2 pl-6 shadow-soft flex items-center border border-alabaster dark:border-white/10 focus-within:ring-2 focus-within:ring-onyx dark:focus-within:ring-white transition-all bg-white/80 dark:bg-onyx/80 backdrop-blur-md">
+            <Search size={20} className="text-slate-400 mr-3 flex-shrink-0" />
+            <input
+              type="text"
+              value={spotlightQuery}
+              onChange={(e) => setSpotlightQuery(e.target.value)}
+              placeholder="Search across all files, notes, code, PDFs, or screenshots..."
+              className="w-full bg-transparent border-none outline-none text-charcoal dark:text-white placeholder:text-slate-400 text-sm"
+            />
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-full bg-onyx text-white dark:bg-white dark:text-onyx font-medium text-xs hover:opacity-90 transition-opacity shadow-sm flex items-center gap-1.5 flex-shrink-0"
+            >
+              <span>Search</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </form>
+
+        {/* Quick Launch & Suggestions */}
+        <div className="flex items-center justify-center gap-2 flex-wrap text-xs text-slate-500 pt-1">
+          <span className="font-medium">Try:</span>
+          {['Resume & CV', 'Project Roadmap', 'Invoices', 'Screenshots'].map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => navigate(`/search?q=${encodeURIComponent(tag)}`)}
+              className="px-3 py-1 rounded-full border border-alabaster dark:border-white/10 bg-white/60 dark:bg-white/5 hover:border-onyx/30 dark:hover:border-white/30 text-charcoal dark:text-white transition-colors"
+            >
+              {tag}
+            </button>
+          ))}
           <Link
             to="/visual"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-alabaster dark:border-white/10 bg-white/80 dark:bg-white/5 text-charcoal dark:text-white font-medium text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+            className="flex items-center gap-1 px-3 py-1 rounded-full border border-alabaster dark:border-white/10 bg-pastel-mint/30 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-medium hover:opacity-80 transition-opacity"
           >
-            <ImageIcon size={16} className="text-emerald-600 dark:text-emerald-400" />
-            Visual Memory Search
+            <ImageIcon size={12} />
+            <span>Visual OCR</span>
           </Link>
         </div>
       </div>
@@ -541,6 +605,88 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
+      {/* Starred Memories Section */}
+      {bookmarks.length > 0 && (
+        <div className="glass-card rounded-3xl p-6 shadow-soft space-y-4 border border-amber-200/50 dark:border-amber-900/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                <Star size={15} className="fill-amber-500 text-amber-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-serif font-bold text-charcoal dark:text-white">
+                  Starred Memories
+                </h2>
+                <p className="text-xs text-slate-500">Quick access to your most important bookmarked files</p>
+              </div>
+            </div>
+            <Link
+              to="/search"
+              className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline"
+            >
+              Search & Filter <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {bookmarks.slice(0, 4).map((b) => (
+              <div
+                key={b.id}
+                className="p-3.5 rounded-2xl bg-white/70 dark:bg-white/5 border border-alabaster dark:border-white/10 hover:border-amber-300 dark:hover:border-amber-700/50 transition-all flex flex-col justify-between gap-2.5 group"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                      {b.extension.replace('.', '')}
+                    </span>
+                    <Star size={13} className="fill-amber-500 text-amber-500" />
+                  </div>
+                  <h4
+                    onClick={() => handleOpenFile(b.file_id)}
+                    className="text-xs font-semibold text-charcoal dark:text-white truncate cursor-pointer group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors"
+                  >
+                    {b.filename}
+                  </h4>
+                  <p className="text-[10px] font-mono text-slate-400 truncate">{b.path}</p>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-alabaster dark:border-white/10">
+                  <button
+                    onClick={() =>
+                      navigate(
+                        `/assistant?fileId=${b.file_id}&fileName=${encodeURIComponent(b.filename)}`
+                      )
+                    }
+                    className="text-[11px] text-purple-600 dark:text-purple-400 font-medium hover:underline flex items-center gap-1"
+                  >
+                    <Sparkles size={11} /> Ask AI
+                  </button>
+                  <FileActionMenu
+                    file={{
+                      id: b.file_id,
+                      filename: b.filename,
+                      path: b.path,
+                      extension: b.extension,
+                    }}
+                    onPreview={() =>
+                      setPreviewDocModal({
+                        id: b.file_id,
+                        filename: b.filename,
+                        path: b.path,
+                        extension: b.extension,
+                        file_type: b.file_type,
+                        file_size: b.file_size,
+                        file_hash: '',
+                        indexing_status: 'indexed',
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Recent Files Table */}
       <div className="glass-card rounded-3xl p-6 shadow-soft space-y-4">
         <div className="flex items-center justify-between">
@@ -584,23 +730,48 @@ export const Dashboard: React.FC = () => {
                     <p className="text-sm font-medium text-charcoal dark:text-white truncate">
                       {file.filename}
                     </p>
-                    <p className="text-xs font-mono text-slate-400 truncate max-w-lg">
-                      {file.path}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
+                      <span className="truncate max-w-md">{file.path}</span>
+                      {file.modified_at && (
+                        <span className="flex items-center gap-1 flex-shrink-0 text-[11px] text-slate-400">
+                          <Clock size={11} /> {formatTimeAgo(file.modified_at)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <span className="text-xs text-slate-400">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs text-slate-400 hidden sm:inline">
                     {(file.file_size / 1024).toFixed(1)} KB
                   </span>
+                  <button
+                    onClick={() =>
+                      navigate(
+                        `/assistant?fileId=${file.id}&fileName=${encodeURIComponent(file.filename)}`
+                      )
+                    }
+                    className="p-1.5 rounded-lg text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors"
+                    title="Ask AI about this file"
+                  >
+                    <Sparkles size={15} />
+                  </button>
                   <button
                     onClick={() => handleOpenFile(file.id)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-onyx dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                     title="Open original file in Windows default application"
                   >
-                    <ExternalLink size={16} />
+                    <ExternalLink size={15} />
                   </button>
+                  <FileActionMenu
+                    file={{
+                      id: file.id,
+                      filename: file.filename,
+                      path: file.path,
+                      extension: file.extension,
+                    }}
+                    onPreview={() => setPreviewDocModal(file)}
+                  />
                 </div>
               </div>
             ))}

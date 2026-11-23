@@ -97,13 +97,11 @@ export const Header: React.FC = () => {
           />
           <span className="font-medium truncate max-w-xs">
             {isIndexing
-            {isIndexing
               ? total > 0
                 ? `Indexing: ${processed}/${total} (${percent}%)`
                 : `Indexing: ${status?.current_file || 'Processing...'}`
               : autoSync?.auto_sync_enabled
               ? `Auto-Sync Active (${autoSync.monitored_folders} folders)`
-              : 'Memory Synchronized'}
               : 'Memory Synchronized'}
           </span>
 
