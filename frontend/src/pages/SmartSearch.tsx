@@ -10,6 +10,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { api, SearchResultItem } from '../api/client';
+import { TiltCard } from '../components/TiltCard';
 
 const SAMPLE_QUERIES = [
   'Support Vector Machines classification',
@@ -185,7 +186,7 @@ export const SmartSearch: React.FC = () => {
             const pagesStr = res.pages.length > 0 ? `Page ${res.pages.join(', ')}` : null;
 
             return (
-              <div
+              <TiltCard
                 key={res.file_id}
                 onClick={() => handleOpenFile(res.file_id)}
                 className="glass-card rounded-2xl p-5 shadow-soft hover:shadow-soft-lg hover:border-purple-300 dark:hover:border-purple-500/40 transition-all border border-alabaster dark:border-white/10 group cursor-pointer flex items-center justify-between gap-4"
@@ -216,7 +217,7 @@ export const SmartSearch: React.FC = () => {
                     Opening in Windows...
                   </span>
                 )}
-              </div>
+              </TiltCard>
             );
           });
         })()}
