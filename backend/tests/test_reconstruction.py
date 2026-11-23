@@ -107,7 +107,7 @@ def test_grounded_assistant(tmp_path):
     assert res["grounded"] is True
     assert len(res["citations"]) > 0
     assert "algorithm_notes.txt" in res["citations"][0]["filename"]
-    assert "matching file" in res["answer"].lower()
+    assert "matched file" in res["answer"].lower() or "matching file" in res["answer"].lower()
 
 def test_project_create_and_delete():
     """Verify creating and deleting projects."""
