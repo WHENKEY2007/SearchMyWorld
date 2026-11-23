@@ -71,6 +71,12 @@ export interface IndexingStatus {
   failed_files: number;
   current_file?: string;
   status: string;
+  recent_files?: Array<{
+    filename: string;
+    extension: string;
+    status: string;
+    time: string;
+  }>;
 }
 
 export interface TimelineItem {

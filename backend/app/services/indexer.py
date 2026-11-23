@@ -13,6 +13,12 @@ from app.services.embedding import embedding_service
 
 logger = logging.getLogger(__name__)
 
+IGNORED_DIRS = {
+    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
+    "AppData", "dist", "build", ".idea", ".vscode", "$RECYCLE.BIN",
+    "System Volume Information", ".next", ".cache", ".turbo"
+}
+
 class IndexingService:
     def __init__(self):
         self.is_indexing = False
@@ -23,7 +29,8 @@ class IndexingService:
             "skipped_files": 0,
             "failed_files": 0,
             "current_file": None,
-            "status": "idle"
+            "status": "idle",
+            "recent_files": []
         }
 
     def compute_sha256(self, file_path: Path) -> str:
@@ -135,7 +142,8 @@ class IndexingService:
             "skipped_files": 0,
             "failed_files": 0,
             "current_file": None,
-            "status": "indexing"
+            "status": "indexing",
+            "recent_files": []
         }
 
         try:
@@ -147,7 +155,9 @@ class IndexingService:
                 if not folder_path.exists():
                     continue
 
-                for root, _, filenames in os.walk(folder_path):
+                for root, dirs, filenames in os.walk(folder_path):
+                    # Fast directory pruning: skip junk, caches, virtualenvs, git
+                    dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith('.')]
                     for fname in filenames:
                         fp = Path(root) / fname
                         if extractor_manager.is_supported(fp):
@@ -166,6 +176,17 @@ class IndexingService:
                     self.current_progress["skipped_files"] += 1
                 elif res["status"] == "failed":
                     self.current_progress["failed_files"] += 1
+
+                # Record in recent stream (up to 15 files)
+                recent_entry = {
+                    "filename": fp.name,
+                    "extension": fp.suffix.lower(),
+                    "status": res["status"],
+                    "time": datetime.now().strftime("%H:%M:%S")
+                }
+                self.current_progress["recent_files"].insert(0, recent_entry)
+                if len(self.current_progress["recent_files"]) > 15:
+                    self.current_progress["recent_files"].pop()
 
             self.current_progress["status"] = "completed"
         except Exception as e:
