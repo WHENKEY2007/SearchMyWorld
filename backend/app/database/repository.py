@@ -276,17 +276,51 @@ class DatabaseRepository:
 
     # ------------------ IMAGE OCR ------------------
     @staticmethod
-    def insert_image_ocr(file_id: str, extracted_text: str, status: str = "completed") -> str:
+    def insert_image_ocr(
+        file_id: str,
+        extracted_text: str,
+        status: str = "completed",
+        boxes_json: Optional[str] = None,
+        img_width: Optional[int] = None,
+        img_height: Optional[int] = None
+    ) -> str:
         ocr_id = str(uuid.uuid4())
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT OR REPLACE INTO image_ocr (id, file_id, extracted_text, processing_status) VALUES (?, ?, ?, ?)",
-                (ocr_id, file_id, extracted_text, status)
+                """
+                INSERT OR REPLACE INTO image_ocr (id, file_id, extracted_text, processing_status, boxes_json, img_width, img_height)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ocr_id, file_id, extracted_text, status, boxes_json, img_width, img_height)
             )
             return ocr_id
 
     @staticmethod
+    def get_image_ocr_by_file_id(file_id: str) -> Optional[Dict[str, Any]]:
+        import json
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT o.id, o.file_id, o.extracted_text, o.boxes_json, o.img_width, o.img_height,
+                       f.filename, f.path, f.file_size, f.modified_at
+                FROM image_ocr o
+                JOIN files f ON o.file_id = f.id
+                WHERE o.file_id = ?
+                """,
+                (file_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            res = dict(row)
+            try:
+                res["boxes"] = json.loads(res["boxes_json"]) if res.get("boxes_json") else []
+            except Exception:
+                res["boxes"] = []
+            return res
+
     @staticmethod
     def search_image_ocr(
         query: Optional[str] = None,
@@ -298,12 +332,20 @@ class DatabaseRepository:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT o.id, o.file_id, o.extracted_text, f.filename, f.path, f.modified_at, f.created_at, f.file_size
+                SELECT o.id, o.file_id, o.extracted_text, o.boxes_json, o.img_width, o.img_height,
+                       f.filename, f.path, f.modified_at, f.created_at, f.file_size
                 FROM image_ocr o
                 JOIN files f ON o.file_id = f.id
                 """
             )
             rows = [dict(r) for r in cursor.fetchall()]
+
+        import json
+        for r in rows:
+            try:
+                r["boxes"] = json.loads(r["boxes_json"]) if r.get("boxes_json") else []
+            except Exception:
+                r["boxes"] = []
 
         if not clean_q:
             for r in rows:
@@ -1018,3 +1060,104 @@ class DatabaseRepository:
                 (limit,)
             )
             return [dict(r) for r in cursor.fetchall()]
+
+    # ------------------ SMART COLLECTIONS ------------------
+    @staticmethod
+    def get_collections_summary() -> List[Dict[str, Any]]:
+        """Returns auto-categorized collections with counts and matching criteria."""
+        collections_def = [
+            {
+                "id": "invoices",
+                "title": "Invoices & Receipts",
+                "description": "Bills, payment receipts, taxes, and financial orders",
+                "icon": "🧾",
+                "color": "emerald",
+                "where": "(f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%')"
+            },
+            {
+                "id": "certificates",
+                "title": "Certificates & Credentials",
+                "description": "Diplomas, credentials, IDs, and certificates",
+                "icon": "📜",
+                "color": "amber",
+                "where": "(f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%')"
+            },
+            {
+                "id": "study",
+                "title": "Study & Notes",
+                "description": "Assignments, lectures, summaries, and books",
+                "icon": "📓",
+                "color": "purple",
+                "where": "(f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%')"
+            },
+            {
+                "id": "code",
+                "title": "Code & Configs",
+                "description": "Source code, notebooks, scripts, and configs",
+                "icon": "💻",
+                "color": "blue",
+                "where": "f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ini', '.ipynb', '.env')"
+            },
+            {
+                "id": "screenshots",
+                "title": "Visual Screenshots",
+                "description": "All captured screens, error dialogs, and diagrams",
+                "icon": "📸",
+                "color": "rose",
+                "where": "(f.file_type = 'image' OR f.extension IN ('.png', '.jpg', '.jpeg', '.webp'))"
+            }
+        ]
+
+        results = []
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            for col in collections_def:
+                try:
+                    q = f"SELECT COUNT(*) FROM files f WHERE {col['where']}"
+                    cursor.execute(q)
+                    cnt = cursor.fetchone()[0] or 0
+                except Exception:
+                    cnt = 0
+                results.append({
+                    "id": col["id"],
+                    "title": col["title"],
+                    "description": col["description"],
+                    "icon": col["icon"],
+                    "color": col["color"],
+                    "count": cnt
+                })
+        return results
+
+    @staticmethod
+    def get_collection_files(collection_id: str, limit: int = 100, offset: int = 0) -> Tuple[List[Dict[str, Any]], int]:
+        """Returns files matching a specific collection."""
+        where_map = {
+            "invoices": "(f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%')",
+            "certificates": "(f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%')",
+            "study": "(f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%')",
+            "code": "f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ini', '.ipynb', '.env')",
+            "screenshots": "(f.file_type = 'image' OR f.extension IN ('.png', '.jpg', '.jpeg', '.webp'))"
+        }
+        where_clause = where_map.get(collection_id.lower())
+        if not where_clause:
+            return [], 0
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            count_q = f"SELECT COUNT(*) FROM files f WHERE {where_clause}"
+            cursor.execute(count_q)
+            total = cursor.fetchone()[0] or 0
+
+            q = f"""
+                SELECT f.id, f.filename, f.path, f.extension, f.file_type, f.file_size,
+                       f.created_at, f.modified_at, f.indexed_at, f.indexing_status,
+                       CASE WHEN b.id IS NOT NULL THEN 1 ELSE 0 END AS is_bookmarked
+                FROM files f
+                LEFT JOIN user_bookmarks b ON f.id = b.file_id
+                WHERE {where_clause}
+                ORDER BY f.modified_at DESC
+                LIMIT ? OFFSET ?
+            """
+            cursor.execute(q, (limit, offset))
+            files = [dict(r) for r in cursor.fetchall()]
+            return files, total

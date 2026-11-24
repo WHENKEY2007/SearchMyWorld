@@ -22,6 +22,12 @@ export interface SearchResponse {
   results: SearchResultItem[];
 }
 
+export interface OCRBoxItem {
+  box: number[][]; // [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+  text: string;
+  confidence: number;
+}
+
 export interface ImageOCRResult {
   id: string;
   file_id: string;
@@ -32,6 +38,17 @@ export interface ImageOCRResult {
   created_at?: string;
   file_size: number;
   relevance_score?: number;
+  boxes?: OCRBoxItem[];
+  img_width?: number | null;
+  img_height?: number | null;
+}
+
+export interface SmartCollectionItem {
+  id: string;
+  title: string;
+  icon: string;
+  description: string;
+  count: number;
 }
 
 export interface FolderStatsDetail {
@@ -527,5 +544,25 @@ export const api = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to remove tag');
+  },
+
+  // Smart Collections & OCR Inspection
+  getCollections: async (): Promise<SmartCollectionItem[]> => {
+    const res = await fetch(`${API_BASE}/files/collections`);
+    if (!res.ok) throw new Error('Failed to fetch collections');
+    return res.json();
+  },
+
+  getCollectionFiles: async (collectionId: string, limit: number = 50): Promise<{ collection_id: string; files: FileItem[]; total: number }> => {
+    const res = await fetch(`${API_BASE}/files/collections/${encodeURIComponent(collectionId)}?limit=${limit}`);
+    if (!res.ok) throw new Error(`Failed to fetch files for collection ${collectionId}`);
+    return res.json();
+  },
+
+  getFileOcr: async (fileId: string): Promise<ImageOCRResult | null> => {
+    const res = await fetch(`${API_BASE}/files/${fileId}/ocr`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Failed to fetch file OCR data');
+    return res.json();
   },
 };

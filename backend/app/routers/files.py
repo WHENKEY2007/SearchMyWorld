@@ -57,6 +57,17 @@ def get_all_tags():
     """Lists all user tags with file count."""
     return DatabaseRepository.get_all_tags()
 
+@router.get("/collections")
+def get_collections():
+    """Lists smart auto-categorized collections (Invoices, Certificates, Study, Code, Screenshots)."""
+    return DatabaseRepository.get_collections_summary()
+
+@router.get("/collections/{collection_id}")
+def get_collection_files(collection_id: str, limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """Returns files belonging to a specific smart collection."""
+    files, total = DatabaseRepository.get_collection_files(collection_id, limit=limit, offset=offset)
+    return {"collection_id": collection_id, "files": files, "total": total, "limit": limit, "offset": offset}
+
 @router.get("/{file_id}/tags")
 def get_file_tags(file_id: str):
     """Gets tags assigned to a file."""
@@ -73,6 +84,47 @@ def remove_file_tag(file_id: str, tag: str):
     """Removes a tag from a file."""
     success = DatabaseRepository.remove_file_tag(file_id, tag)
     return {"success": success, "file_id": file_id, "tag": tag}
+
+@router.get("/{file_id}/ocr")
+def get_file_ocr(file_id: str):
+    """Returns OCR text and bounding boxes for an image, generating them on-demand if missing."""
+    import json
+    ocr_data = DatabaseRepository.get_image_ocr_by_file_id(file_id)
+    if ocr_data and ocr_data.get("boxes"):
+        return ocr_data
+
+    file_rec = DatabaseRepository.get_file_by_id(file_id)
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = Path(file_rec["path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    if file_rec["file_type"] == "image":
+        from app.extractors.image_ocr import ImageOCRExtractor
+        extracted = ImageOCRExtractor().extract(file_path)
+        boxes = extracted.metadata.get("boxes", [])
+        width = extracted.metadata.get("width")
+        height = extracted.metadata.get("height")
+        DatabaseRepository.insert_image_ocr(
+            file_id=file_id,
+            extracted_text=extracted.text,
+            status="completed",
+            boxes_json=json.dumps(boxes) if boxes else None,
+            img_width=width,
+            img_height=height
+        )
+        return {
+            "file_id": file_id,
+            "filename": file_rec["filename"],
+            "path": file_rec["path"],
+            "extracted_text": extracted.text,
+            "boxes": boxes,
+            "img_width": width,
+            "img_height": height
+        }
+    return {"file_id": file_id, "extracted_text": "", "boxes": [], "img_width": None, "img_height": None}
 
 @router.delete("/{file_id}")
 def delete_file(file_id: str, delete_from_disk: bool = Query(True)):

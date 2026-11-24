@@ -14,6 +14,7 @@ import {
 import { api, FileItem } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { FileActionMenu } from '../components/FileActionMenu';
+import { FileTagList } from '../components/FileTagList';
 import { Sparkles } from 'lucide-react';
 
 export const MyFiles: React.FC = () => {
@@ -146,7 +147,8 @@ export const MyFiles: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-5 max-w-md">
                       <p className="font-semibold text-charcoal dark:text-white truncate">{f.filename}</p>
-                      <p className="font-mono text-[11px] text-slate-400 truncate">{f.path}</p>
+                      <p className="font-mono text-[11px] text-slate-400 truncate mb-1">{f.path}</p>
+                      <FileTagList fileId={f.id} compact />
                     </td>
                     <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
                       {(f.file_size / 1024).toFixed(1)} KB

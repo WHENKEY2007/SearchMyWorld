@@ -118,8 +118,20 @@ class IndexingService:
             extracted = extractor_manager.extract(file_path)
 
             if file_type == "image":
-                # Save to OCR store
-                DatabaseRepository.insert_image_ocr(file_id, extracted.text, "completed")
+                # Save to OCR store with bounding boxes and dimensions
+                import json
+                boxes = extracted.metadata.get("boxes", [])
+                boxes_json = json.dumps(boxes) if boxes else None
+                width = extracted.metadata.get("width")
+                height = extracted.metadata.get("height")
+                DatabaseRepository.insert_image_ocr(
+                    file_id=file_id,
+                    extracted_text=extracted.text,
+                    status="completed",
+                    boxes_json=boxes_json,
+                    img_width=width,
+                    img_height=height
+                )
 
             # Chunk document or OCR text
             doc_chunks = chunker.chunk_document(file_id, extracted)

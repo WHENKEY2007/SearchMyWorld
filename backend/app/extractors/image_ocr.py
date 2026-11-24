@@ -30,16 +30,27 @@ class ImageOCRExtractor(BaseExtractor):
                 "mode": img.mode
             }
 
+        boxes = []
         if engine:
             try:
                 result, elapse = engine(str(file_path))
                 if result:
-                    lines = [line[1] for line in result if line and len(line) > 1]
+                    lines = []
+                    for line in result:
+                        if line and len(line) > 1:
+                            box = line[0]
+                            text_str = str(line[1]).strip()
+                            if text_str:
+                                score = float(line[2]) if len(line) > 2 else 1.0
+                                lines.append(text_str)
+                                boxes.append({"box": box, "text": text_str, "score": score})
                     extracted_text = "\n".join(lines)
             except Exception as e:
                 extracted_text = f"[OCR Extraction Error: {str(e)}]"
         else:
             extracted_text = "[RapidOCR not installed or unavailable]"
+
+        metadata["boxes"] = boxes
 
         pages = [
             DocumentPage(

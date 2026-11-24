@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS image_ocr (
     id TEXT PRIMARY KEY,
     file_id TEXT NOT NULL UNIQUE,
     extracted_text TEXT NOT NULL,
+    boxes_json TEXT,
+    img_width INTEGER,
+    img_height INTEGER,
     processing_status TEXT DEFAULT 'completed', -- 'completed' | 'failed'
     FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
 );
