@@ -4,9 +4,14 @@ echo ====================================================
 echo Starting SearchMyWorld...
 echo ====================================================
 
+rem Lock in Python 3.11 so Windows never defaults to preview Python 3.14/3.13
+if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+    set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%"
+)
+
 cd /d "%~dp0backend"
 
-rem Check if Python virtual environment exists and uses Python 3.11
+rem Check if Python virtual environment exists and strictly uses Python 3.11
 if exist ".venv\pyvenv.cfg" (
     findstr /i "3.11" .venv\pyvenv.cfg >nul 2>&1
     if errorlevel 1 (
@@ -42,8 +47,8 @@ if not exist ".venv\Scripts\python.exe" (
     echo Setup complete! Starting SearchMyWorld...
 )
 
-rem Start backend in background if not already running
-start "SearchMyWorld Backend" /min cmd /k "cd /d "%~dp0backend" && .venv\Scripts\python.exe run.py"
+rem Start backend in background using verified Python 3.11 environment
+start "SearchMyWorld Backend" /min cmd /k "cd /d "%~dp0backend" && set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%LOCALAPPDATA%\Programs\Python\Python311\Scripts;%PATH%" && .venv\Scripts\python.exe run.py"
 
 rem Wait 3 seconds for server readiness
 timeout /t 3 /nobreak >nul
