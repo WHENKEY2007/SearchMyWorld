@@ -32,38 +32,41 @@ class HybridSearchEngine:
         # 1. Lexical Retrieval via SQLite FTS5
         lexical_raw = DatabaseRepository.search_fts(query, limit=limit * 2)
         
-        # 2. Semantic Dense Retrieval
-        embeddings_records = DatabaseRepository.get_all_embeddings()
+        # 2. Semantic Dense Retrieval (Memory-safe bounded pool)
         semantic_raw = []
-        if embeddings_records:
-            query_vec = embedding_service.encode_single(query)
-            doc_vecs = np.array([r["vector"] for r in embeddings_records], dtype=np.float32)
-            similarities = embedding_service.cosine_similarity(query_vec, doc_vecs)
+        try:
+            embeddings_records = DatabaseRepository.get_all_embeddings(limit=25000)
+            if embeddings_records:
+                query_vec = embedding_service.encode_single(query)
+                doc_vecs = np.array([r["vector"] for r in embeddings_records], dtype=np.float32)
+                similarities = embedding_service.cosine_similarity(query_vec, doc_vecs)
 
-            # Sort indices descending by similarity
-            top_indices = np.argsort(similarities)[::-1][:limit * 2]
-            max_sim = float(similarities[top_indices[0]]) if len(top_indices) > 0 else 0.0
+                # Sort indices descending by similarity
+                top_indices = np.argsort(similarities)[::-1][:limit * 2]
+                max_sim = float(similarities[top_indices[0]]) if len(top_indices) > 0 else 0.0
 
-            # Only accept semantic matches if confidence threshold is met
-            if max_sim >= 0.26:
-                for rank_idx, idx in enumerate(top_indices):
-                    score = float(similarities[idx])
-                    if score >= 0.28 and score >= (max_sim * 0.68):
-                        rec = embeddings_records[idx]
-                        semantic_raw.append({
-                            "chunk_id": rec["chunk_id"],
-                            "file_id": rec["file_id"],
-                            "content": rec["content"],
-                            "filename": rec["filename"],
-                            "path": rec["path"],
-                            "extension": rec["extension"],
-                            "folder_id": rec.get("folder_id"),
-                            "modified_at": rec.get("modified_at"),
-                            "created_at": rec.get("created_at"),
-                            "page_number": rec["page_number"],
-                            "section_title": rec["section_title"],
-                            "score": score
-                        })
+                # Only accept semantic matches if confidence threshold is met
+                if max_sim >= 0.26:
+                    for rank_idx, idx in enumerate(top_indices):
+                        score = float(similarities[idx])
+                        if score >= 0.28 and score >= (max_sim * 0.68):
+                            rec = embeddings_records[idx]
+                            semantic_raw.append({
+                                "chunk_id": rec["chunk_id"],
+                                "file_id": rec["file_id"],
+                                "content": rec["content"],
+                                "filename": rec["filename"],
+                                "path": rec["path"],
+                                "extension": rec["extension"],
+                                "folder_id": rec.get("folder_id"),
+                                "modified_at": rec.get("modified_at"),
+                                "created_at": rec.get("created_at"),
+                                "page_number": rec["page_number"],
+                                "section_title": rec["section_title"],
+                                "score": score
+                            })
+        except Exception as e:
+            logger.warning(f"Semantic dense retrieval skipped or throttled: {e}")
 
         # 3. Reciprocal Rank Fusion (RRF)
         rrf_scores: Dict[str, float] = {}

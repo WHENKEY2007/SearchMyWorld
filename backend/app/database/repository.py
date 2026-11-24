@@ -243,7 +243,7 @@ class DatabaseRepository:
                 )
 
     @staticmethod
-    def get_all_embeddings() -> List[Dict[str, Any]]:
+    def get_all_embeddings(limit: int = 25000) -> List[Dict[str, Any]]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -253,25 +253,31 @@ class DatabaseRepository:
                 FROM embeddings e
                 JOIN document_chunks c ON e.chunk_id = c.id
                 JOIN files f ON c.file_id = f.id
-                """
+                ORDER BY f.modified_at DESC
+                LIMIT ?
+                """,
+                (limit,)
             )
             results = []
             for row in cursor.fetchall():
-                vec = np.frombuffer(row["embedding_data"], dtype=np.float32)
-                results.append({
-                    "chunk_id": row["chunk_id"],
-                    "vector": vec,
-                    "file_id": row["file_id"],
-                    "content": row["content"],
-                    "page_number": row["page_number"],
-                    "section_title": row["section_title"],
-                    "filename": row["filename"],
-                    "path": row["path"],
-                    "extension": row["extension"],
-                    "folder_id": row["folder_id"],
-                    "modified_at": row["modified_at"],
-                    "created_at": row["created_at"]
-                })
+                try:
+                    vec = np.frombuffer(row["embedding_data"], dtype=np.float32)
+                    results.append({
+                        "chunk_id": row["chunk_id"],
+                        "vector": vec,
+                        "file_id": row["file_id"],
+                        "content": row["content"],
+                        "page_number": row["page_number"],
+                        "section_title": row["section_title"],
+                        "filename": row["filename"],
+                        "path": row["path"],
+                        "extension": row["extension"],
+                        "folder_id": row["folder_id"],
+                        "modified_at": row["modified_at"],
+                        "created_at": row["created_at"]
+                    })
+                except Exception:
+                    continue
             return results
 
     # ------------------ IMAGE OCR ------------------

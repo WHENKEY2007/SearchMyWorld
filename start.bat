@@ -6,14 +6,26 @@ echo ====================================================
 
 cd /d "%~dp0backend"
 
-rem Check if Python virtual environment exists; if not, auto-install using Python 3.11/3.10
+rem Check if Python virtual environment exists and uses Python 3.11
+if exist ".venv\pyvenv.cfg" (
+    findstr /i "3.11" .venv\pyvenv.cfg >nul 2>&1
+    if errorlevel 1 (
+        echo [NOTICE] Updating virtual environment to stable Python 3.11...
+        rmdir /s /q .venv 2>nul
+    )
+)
+
 if not exist ".venv\Scripts\python.exe" (
     echo ====================================================
     echo First-time setup detected!
     echo Creating virtual environment and installing packages...
     echo (This only happens on the first run. Please wait...)
     echo ====================================================
-    py -3.11 -m venv .venv 2>nul || py -3.12 -m venv .venv 2>nul || python -m venv .venv
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" -m venv .venv
+    ) else (
+        py -3.11 -m venv .venv 2>nul || python -m venv .venv
+    )
     if errorlevel 1 (
         echo [ERROR] Python is not installed or not in your system PATH.
         echo Please install Python 3.11 from python.org and try again.
