@@ -7,12 +7,15 @@ export interface SearchResultItem {
   filename: string;
   path: string;
   extension?: string;
+  modified_at?: string;
+  created_at?: string;
   page_number?: number;
   section_title?: string;
   snippet: string;
   full_content: string;
   relevance_score: number;
   matched_by: string[];
+  match_explanation?: string;
   is_bookmarked?: boolean;
 }
 

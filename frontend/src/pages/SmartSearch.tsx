@@ -417,7 +417,20 @@ export const SmartSearch: React.FC = () => {
                       >
                         {res.filename}
                       </h3>
-                      <p className="text-xs font-mono text-slate-400 truncate max-w-2xl">{res.path}</p>
+                      <div className="flex items-center gap-2 text-xs font-mono text-slate-400 truncate max-w-2xl">
+                        <span className="truncate">{res.path}</span>
+                        {res.modified_at && (
+                          <span className="text-[11px] text-slate-500 whitespace-nowrap">
+                            • Modified: {new Date(res.modified_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                      {res.match_explanation && (
+                        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                          <Sparkles size={11} className="flex-shrink-0" />
+                          <span>Why: {res.match_explanation}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

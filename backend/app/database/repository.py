@@ -494,6 +494,28 @@ class DatabaseRepository:
                     logger.error(f"FTS fallback also failed: {inner_e}")
                     return []
 
+    @staticmethod
+    def search_files_by_name(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Exact and partial filename/path matching to guarantee direct file hits."""
+        clean_q = query.strip()
+        if not clean_q:
+            return []
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT f.id as file_id, f.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
+                       c.id as chunk_id, c.content, c.page_number, c.section_title
+                FROM files f
+                LEFT JOIN document_chunks c ON f.id = c.file_id
+                WHERE f.filename LIKE ? OR f.path LIKE ?
+                ORDER BY CASE WHEN f.filename = ? THEN 1 WHEN f.filename LIKE ? THEN 2 ELSE 3 END, f.modified_at DESC
+                LIMIT ?
+                """,
+                (f"%{clean_q}%", f"%{clean_q}%", clean_q, f"{clean_q}%", limit)
+            )
+            return [dict(r) for r in cursor.fetchall()]
+
     # ------------------ TIMELINE ------------------
     @staticmethod
     def get_timeline(limit: int = 100, date_type: str = "modified") -> List[Dict[str, Any]]:
