@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(file_hash);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
 CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_files_mod_desc ON files(modified_at DESC);
+CREATE INDEX IF NOT EXISTS idx_files_ext_mod ON files(extension, modified_at DESC);
 
 CREATE TABLE IF NOT EXISTS document_chunks (
     id TEXT PRIMARY KEY,

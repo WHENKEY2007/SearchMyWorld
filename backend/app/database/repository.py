@@ -243,21 +243,62 @@ class DatabaseRepository:
                 )
 
     @staticmethod
-    def get_all_embeddings(limit: int = 25000) -> List[Dict[str, Any]]:
+    def get_all_embeddings(
+        limit: int = 5000,
+        extension_filter: Optional[str] = None,
+        folder_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
+            where_clauses = ["1=1"]
+            params: List[Any] = []
+            
+            if extension_filter:
+                where_clauses.append("f.extension = ?")
+                params.append(extension_filter.lower())
+            if folder_id:
+                where_clauses.append("f.folder_id = ?")
+                params.append(folder_id)
+                
+            where_sql = " AND ".join(where_clauses)
+            
+            # Use appropriate index hint to guarantee sub-second retrieval without full table scan
+            if extension_filter:
+                index_hint = "INDEXED BY idx_files_ext_mod"
+                order_by = "f.extension, f.modified_at DESC"
+            else:
+                index_hint = "INDEXED BY idx_files_mod_desc"
+                order_by = "f.modified_at DESC"
+                
+            sql = f"""
                 SELECT e.chunk_id, e.embedding_data, c.file_id, c.content, c.page_number, c.section_title,
                        f.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at
-                FROM embeddings e
-                JOIN document_chunks c ON e.chunk_id = c.id
-                JOIN files f ON c.file_id = f.id
-                ORDER BY f.modified_at DESC
+                FROM files f {index_hint}
+                JOIN document_chunks c ON c.file_id = f.id
+                JOIN embeddings e ON e.chunk_id = c.id
+                WHERE {where_sql}
+                ORDER BY {order_by}
                 LIMIT ?
-                """,
-                (limit,)
-            )
+            """
+            params.append(limit)
+            
+            try:
+                cursor.execute(sql, tuple(params))
+            except Exception as e:
+                logger.warning(f"Indexed embeddings query fallback triggered: {e}")
+                # Fallback without index hint if needed
+                fallback_sql = f"""
+                    SELECT e.chunk_id, e.embedding_data, c.file_id, c.content, c.page_number, c.section_title,
+                           f.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at
+                    FROM files f
+                    JOIN document_chunks c ON c.file_id = f.id
+                    JOIN embeddings e ON e.chunk_id = c.id
+                    WHERE {where_sql}
+                    ORDER BY {order_by}
+                    LIMIT ?
+                """
+                cursor.execute(fallback_sql, tuple(params))
+
             results = []
             for row in cursor.fetchall():
                 try:
@@ -443,7 +484,12 @@ class DatabaseRepository:
 
     # ------------------ FTS LEXICAL SEARCH ------------------
     @staticmethod
-    def search_fts(query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_fts(
+        query: str,
+        limit: int = 50,
+        extension_filter: Optional[str] = None,
+        folder_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         # Sanitize query for FTS5 (avoid syntax errors with special chars)
         sanitized_query = "".join(c if c.isalnum() or c.isspace() else " " for c in query).strip()
         if not sanitized_query:
@@ -460,21 +506,31 @@ class DatabaseRepository:
         clause_parts.append("(" + " OR ".join(f'"{token}"*' for token in tokens) + ")")
         fts_expr = " OR ".join(clause_parts)
 
+        filter_sql_parts = []
+        filter_params = []
+        if extension_filter:
+            filter_sql_parts.append("AND f.extension = ?")
+            filter_params.append(extension_filter.lower())
+        if folder_id:
+            filter_sql_parts.append("AND f.folder_id = ?")
+            filter_params.append(folder_id)
+        filter_sql = " ".join(filter_sql_parts)
+
         with get_db_connection() as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
                            c.page_number, c.section_title, bm25(chunks_fts) as rank
                     FROM chunks_fts fts
                     JOIN files f ON fts.file_id = f.id
                     JOIN document_chunks c ON fts.chunk_id = c.id
-                    WHERE chunks_fts MATCH ?
+                    WHERE chunks_fts MATCH ? {filter_sql}
                     ORDER BY rank ASC
                     LIMIT ?
                     """,
-                    (fts_expr, limit)
+                    (fts_expr, *filter_params, limit)
                 )
                 return [dict(r) for r in cursor.fetchall()]
             except sqlite3.OperationalError as e:
@@ -483,17 +539,17 @@ class DatabaseRepository:
                 safe_expr = " OR ".join(f'"{t}"' for t in tokens)
                 try:
                     cursor.execute(
-                        """
+                        f"""
                         SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
                                c.page_number, c.section_title, bm25(chunks_fts) as rank
                         FROM chunks_fts fts
                         JOIN files f ON fts.file_id = f.id
                         JOIN document_chunks c ON fts.chunk_id = c.id
-                        WHERE chunks_fts MATCH ?
+                        WHERE chunks_fts MATCH ? {filter_sql}
                         ORDER BY rank ASC
                         LIMIT ?
                         """,
-                        (safe_expr, limit)
+                        (safe_expr, *filter_params, limit)
                     )
                     return [dict(r) for r in cursor.fetchall()]
                 except Exception as inner_e:

@@ -29,13 +29,22 @@ class HybridSearchEngine:
         if not query.strip():
             return []
 
-        # 1. Lexical Retrieval via SQLite FTS5
-        lexical_raw = DatabaseRepository.search_fts(query, limit=limit * 2)
+        # 1. Lexical Retrieval via SQLite FTS5 (Scoped by extension/folder if requested)
+        lexical_raw = DatabaseRepository.search_fts(
+            query,
+            limit=limit * 2,
+            extension_filter=extension_filter,
+            folder_id=folder_id
+        )
         
-        # 2. Semantic Dense Retrieval (Memory-safe bounded pool)
+        # 2. Semantic Dense Retrieval (Memory-safe indexed & scoped pool)
         semantic_raw = []
         try:
-            embeddings_records = DatabaseRepository.get_all_embeddings(limit=25000)
+            embeddings_records = DatabaseRepository.get_all_embeddings(
+                limit=5000,
+                extension_filter=extension_filter,
+                folder_id=folder_id
+            )
             if embeddings_records:
                 query_vec = embedding_service.encode_single(query)
                 doc_vecs = np.array([r["vector"] for r in embeddings_records], dtype=np.float32)

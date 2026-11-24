@@ -30,6 +30,10 @@ def init_db() -> None:
         if "img_height" not in columns:
             conn.execute("ALTER TABLE image_ocr ADD COLUMN img_height INTEGER;")
             
+        # Ensure fast sorting and filtering indexes exist on files
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_mod_desc ON files(modified_at DESC);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_files_ext_mod ON files(extension, modified_at DESC);")
+            
         conn.commit()
 
 @contextmanager
