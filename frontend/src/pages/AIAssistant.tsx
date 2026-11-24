@@ -62,6 +62,7 @@ export const AIAssistant: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [switchingChat, setSwitchingChat] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -101,16 +102,25 @@ export const AIAssistant: React.FC = () => {
 
   const selectConversation = async (convId: string) => {
     setCurrentConvId(convId);
-    setLoading(true);
+    setSwitchingChat(true);
+
+    // Sync focused document with the selected conversation
+    const conv = conversations.find((c) => c.id === convId);
+    if (conv?.focused_file_id && conv?.focused_filename) {
+      setFocusedFile({ id: conv.focused_file_id, name: conv.focused_filename });
+    } else {
+      setFocusedFile(null);
+    }
+
     try {
       const res = await api.getConversationHistory(convId);
-      if (res.messages.length > 0) {
+      if (res && res.messages && res.messages.length > 0) {
         setMessages(
           res.messages.map((m: any) => ({
             id: m.id,
             sender: m.sender,
             text: m.text,
-            sources: m.sources,
+            sources: Array.isArray(m.sources) ? m.sources : [],
             created_at: m.created_at,
           }))
         );
@@ -119,8 +129,8 @@ export const AIAssistant: React.FC = () => {
           {
             id: 'welcome',
             sender: 'assistant',
-            text: focusedFile
-              ? `Ready to analyze **${focusedFile.name}**. What would you like to know or summarize about this document?`
+            text: conv?.focused_filename
+              ? `Ready to analyze **${conv.focused_filename}**. What would you like to know or summarize about this document?`
               : 'Hello! I am your personal digital memory assistant. Ask me anything to quickly locate, summarize, or cross-reference your personal documents and screenshots.',
           },
         ]);
@@ -128,15 +138,20 @@ export const AIAssistant: React.FC = () => {
     } catch (err) {
       console.error('Failed to load thread history', err);
     } finally {
-      setLoading(false);
+      setSwitchingChat(false);
     }
   };
 
   const startNewChat = async (title: string = 'New Chat', focusedFileId?: string) => {
     try {
       const newConv = await api.createConversation(title, focusedFileId);
-      setConversations((prev) => [newConv, ...prev]);
+      setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
       setCurrentConvId(newConv.id);
+      if (focusedFileId && focusedFile) {
+        setFocusedFile({ id: focusedFileId, name: focusedFile.name });
+      } else {
+        setFocusedFile(null);
+      }
       setMessages([
         {
           id: 'welcome',
@@ -361,15 +376,15 @@ export const AIAssistant: React.FC = () => {
               )}
 
               <div
-                className={`max-w-2xl rounded-3xl p-4.5 space-y-3 relative group transition-all ${
+                className={`max-w-2xl rounded-2xl px-5 py-3.5 space-y-2 relative group transition-all ${
                   msg.sender === 'user'
-                    ? 'bg-onyx text-white dark:bg-white dark:text-onyx rounded-tr-sm ml-12 shadow-soft'
-                    : 'bg-porcelain-100 dark:bg-white/5 text-charcoal dark:text-white border border-alabaster dark:border-white/10 rounded-tl-sm mr-12'
+                    ? 'bg-purple-600 text-white rounded-tr-none ml-12 shadow-sm'
+                    : 'bg-porcelain-100 dark:bg-white/5 text-charcoal dark:text-white border border-alabaster dark:border-white/10 rounded-tl-none mr-12'
                 }`}
               >
                 {/* Message Header & Copy */}
-                <div className="flex items-center justify-between text-[11px] opacity-70">
-                  <span className="font-medium">{msg.sender === 'user' ? 'You' : 'SearchMyWorld Assistant'}</span>
+                <div className="flex items-center justify-between text-[11px] opacity-80 mb-1">
+                  <span className="font-semibold">{msg.sender === 'user' ? 'You' : 'SearchMyWorld Assistant'}</span>
                   <button
                     onClick={() => handleCopyText(msg.text, msg.id)}
                     className="opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity p-0.5 rounded text-current hover:bg-black/10 dark:hover:bg-white/10"
@@ -380,7 +395,7 @@ export const AIAssistant: React.FC = () => {
                 </div>
 
                 {/* Text Content */}
-                <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                <div className="text-sm leading-relaxed whitespace-pre-wrap font-sans break-words">
                   {msg.text}
                 </div>
 
@@ -405,7 +420,7 @@ export const AIAssistant: React.FC = () => {
                           </span>
                           {src.pages && src.pages.length > 0 && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-mono">
-                              p.{src.pages.join(',')}
+                              p.{Array.isArray(src.pages) ? src.pages.join(',') : src.pages}
                             </span>
                           )}
                           <ExternalLink size={11} className="opacity-40 group-hover/cite:opacity-100 text-slate-500" />
