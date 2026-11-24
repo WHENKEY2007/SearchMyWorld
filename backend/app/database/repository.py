@@ -1,9 +1,12 @@
 import uuid
 import json
+import logging
 import sqlite3
 import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 from app.database.connection import get_db_connection
+
+logger = logging.getLogger(__name__)
 
 class DatabaseRepository:
     """Data Access Layer for SQLite local-first memory store."""
@@ -243,6 +246,22 @@ class DatabaseRepository:
                 )
 
     @staticmethod
+    def _normalize_filter(ext: Optional[str]) -> Tuple[Optional[str], List[Any]]:
+        """Normalizes format/extension filters into SQL where clauses and params."""
+        if not ext:
+            return None, []
+        e = ext.strip().lower()
+        if e in ('image', 'images', 'screenshot', 'screenshots'):
+            return "f.extension IN ('.png', '.jpg', '.jpeg', '.webp')", []
+        if e in ('document', 'documents', 'doc', 'docs'):
+            return "f.extension IN ('.pdf', '.docx', '.pptx', '.txt', '.md')", []
+        if e in ('code', 'data'):
+            return "f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.sql', '.yaml', '.yml', '.xml', '.csv', '.tsv')", []
+        if not e.startswith('.'):
+            e = '.' + e
+        return "f.extension = ?", [e]
+
+    @staticmethod
     def get_all_embeddings(
         limit: int = 5000,
         extension_filter: Optional[str] = None,
@@ -253,17 +272,18 @@ class DatabaseRepository:
             where_clauses = ["1=1"]
             params: List[Any] = []
             
-            if extension_filter:
-                where_clauses.append("f.extension = ?")
-                params.append(extension_filter.lower())
+            ext_clause, ext_params = DatabaseRepository._normalize_filter(extension_filter)
+            if ext_clause:
+                where_clauses.append(ext_clause)
+                params.extend(ext_params)
             if folder_id:
                 where_clauses.append("f.folder_id = ?")
                 params.append(folder_id)
                 
             where_sql = " AND ".join(where_clauses)
             
-            # Use appropriate index hint to guarantee sub-second retrieval without full table scan
-            if extension_filter:
+            # Use appropriate index hint if single exact extension is filtered
+            if ext_clause and "=" in ext_clause:
                 index_hint = "INDEXED BY idx_files_ext_mod"
                 order_by = "f.extension, f.modified_at DESC"
             else:
@@ -490,7 +510,6 @@ class DatabaseRepository:
         extension_filter: Optional[str] = None,
         folder_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        # Sanitize query for FTS5 (avoid syntax errors with special chars)
         sanitized_query = "".join(c if c.isalnum() or c.isspace() else " " for c in query).strip()
         if not sanitized_query:
             return []
@@ -498,23 +517,32 @@ class DatabaseRepository:
         if not tokens:
             return []
 
-        # Prioritize exact multi-word phrase, then all-token intersection (AND), then any-token union (OR)
-        clause_parts = []
-        if len(tokens) > 1:
-            clause_parts.append(f'"{sanitized_query}"')
-            clause_parts.append("(" + " AND ".join(f'"{token}"*' for token in tokens) + ")")
-        clause_parts.append("(" + " OR ".join(f'"{token}"*' for token in tokens) + ")")
-        fts_expr = " OR ".join(clause_parts)
+        stopwords = {
+            "where", "are", "the", "this", "that", "there", "what", "which", "who", "whom",
+            "and", "or", "for", "with", "from", "into", "onto", "about", "above", "after",
+            "some", "such", "than", "then", "very", "will", "would", "shall", "should",
+            "can", "could", "have", "has", "had", "been", "being", "does", "done", "doing",
+            "want", "give", "show", "find"
+        }
+        sig_tokens = [t for t in tokens if t.lower() not in stopwords]
+        if not sig_tokens:
+            sig_tokens = tokens
 
         filter_sql_parts = []
         filter_params = []
-        if extension_filter:
-            filter_sql_parts.append("AND f.extension = ?")
-            filter_params.append(extension_filter.lower())
+        ext_clause, ext_params = DatabaseRepository._normalize_filter(extension_filter)
+        if ext_clause:
+            filter_sql_parts.append(f"AND {ext_clause}")
+            filter_params.extend(ext_params)
         if folder_id:
             filter_sql_parts.append("AND f.folder_id = ?")
             filter_params.append(folder_id)
         filter_sql = " ".join(filter_sql_parts)
+
+        # Stage 1: Exact phrase OR strict AND intersection
+        stage1_expr = " AND ".join(f'"{t}"*' for t in sig_tokens)
+        if len(tokens) > 1:
+            stage1_expr = f'"{sanitized_query}" OR ({stage1_expr})'
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -530,31 +558,34 @@ class DatabaseRepository:
                     ORDER BY rank ASC
                     LIMIT ?
                     """,
-                    (fts_expr, *filter_params, limit)
+                    (stage1_expr, *filter_params, limit)
+                )
+                res = [dict(r) for r in cursor.fetchall()]
+                if res:
+                    return res
+            except Exception as e:
+                logger.warning(f"FTS5 stage 1 match failed for '{stage1_expr}': {e}")
+
+            # Stage 2: Fallback to token union (OR) for partial recall
+            stage2_expr = " OR ".join(f'"{t}"*' for t in sig_tokens)
+            try:
+                cursor.execute(
+                    f"""
+                    SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
+                           c.page_number, c.section_title, bm25(chunks_fts) as rank
+                    FROM chunks_fts fts
+                    JOIN files f ON fts.file_id = f.id
+                    JOIN document_chunks c ON fts.chunk_id = c.id
+                    WHERE chunks_fts MATCH ? {filter_sql}
+                    ORDER BY rank ASC
+                    LIMIT ?
+                    """,
+                    (stage2_expr, *filter_params, limit)
                 )
                 return [dict(r) for r in cursor.fetchall()]
-            except sqlite3.OperationalError as e:
-                logger.warning(f"FTS5 match failed for expression '{fts_expr}': {e}. Retrying with literal token quotes.")
-                # Fallback: simple OR of literal quoted tokens
-                safe_expr = " OR ".join(f'"{t}"' for t in tokens)
-                try:
-                    cursor.execute(
-                        f"""
-                        SELECT fts.chunk_id, fts.file_id, fts.content, fts.filename, f.path, f.extension, f.folder_id, f.modified_at, f.created_at,
-                               c.page_number, c.section_title, bm25(chunks_fts) as rank
-                        FROM chunks_fts fts
-                        JOIN files f ON fts.file_id = f.id
-                        JOIN document_chunks c ON fts.chunk_id = c.id
-                        WHERE chunks_fts MATCH ? {filter_sql}
-                        ORDER BY rank ASC
-                        LIMIT ?
-                        """,
-                        (safe_expr, *filter_params, limit)
-                    )
-                    return [dict(r) for r in cursor.fetchall()]
-                except Exception as inner_e:
-                    logger.error(f"FTS fallback also failed: {inner_e}")
-                    return []
+            except Exception as e2:
+                logger.error(f"FTS5 stage 2 fallback failed for '{stage2_expr}': {e2}")
+                return []
 
     # ------------------ TIMELINE ------------------
     @staticmethod

@@ -12,7 +12,10 @@ def hybrid_search(req: SearchRequest):
         query=req.query,
         limit=req.limit,
         extension_filter=req.extension,
-        file_type_filter=req.file_type
+        file_type_filter=req.file_type,
+        folder_id=req.folder_id,
+        date_range=req.date_range,
+        only_bookmarked=req.only_bookmarked
     )
     return {
         "query": req.query,

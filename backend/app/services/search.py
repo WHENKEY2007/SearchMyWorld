@@ -146,10 +146,24 @@ class HybridSearchEngine:
             if only_bookmarked and not is_bm:
                 continue
 
-            # Apply extension filter
+            # Apply format / extension filter
             ext = (meta.get("extension") or "").lower()
-            if extension_filter and ext != extension_filter.lower():
-                continue
+            if extension_filter:
+                ef = extension_filter.lower().strip()
+                if ef in ('image', 'images', 'screenshot', 'screenshots'):
+                    if ext not in ('.png', '.jpg', '.jpeg', '.webp'):
+                        continue
+                elif ef in ('document', 'documents', 'doc', 'docs'):
+                    if ext not in ('.pdf', '.docx', '.pptx', '.txt', '.md'):
+                        continue
+                elif ef in ('code', 'data'):
+                    if ext not in ('.py', '.js', '.ts', '.html', '.css', '.json', '.sql', '.yaml', '.yml', '.xml', '.csv', '.tsv'):
+                        continue
+                else:
+                    if not ef.startswith('.'):
+                        ef = '.' + ef
+                    if ext != ef:
+                        continue
 
             # Apply file type filter
             if file_type_filter:
