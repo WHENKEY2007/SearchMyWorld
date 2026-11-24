@@ -75,14 +75,17 @@ export const Dashboard: React.FC = () => {
     setLoading(true);
     try {
       const [statsData, recentData, foldersData, dupData, bookmarkData, collectionsData] = await Promise.all([
-        api.getStats(),
+        api.getStats().catch((e) => {
+          console.warn('Failed to load stats:', e);
+          return null;
+        }),
         api.getRecentFiles(8).catch(() => []),
-        api.getFolderStats(),
-        api.getDuplicates(),
+        api.getFolderStats().catch(() => []),
+        api.getDuplicates().catch(() => null),
         api.getBookmarks().catch(() => []),
         api.getCollections().catch(() => []),
       ]);
-      setStats(statsData);
+      if (statsData) setStats(statsData);
       setRecentFiles(recentData);
       setFolderStats(foldersData);
       setDuplicates(dupData);
