@@ -34,9 +34,11 @@ import {
   DuplicateSummaryResponse,
   DuplicateGroup,
   BookmarkItem,
+  SmartCollectionItem,
 } from '../api/client';
 import { TiltCard } from '../components/TiltCard';
 import { FileActionMenu } from '../components/FileActionMenu';
+import { FileTagList } from '../components/FileTagList';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -47,6 +49,10 @@ export const Dashboard: React.FC = () => {
   const [folderStats, setFolderStats] = useState<FolderStatsDetail[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const [duplicates, setDuplicates] = useState<DuplicateSummaryResponse | null>(null);
+  const [collections, setCollections] = useState<SmartCollectionItem[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<SmartCollectionItem | null>(null);
+  const [collectionFiles, setCollectionFiles] = useState<FileItem[]>([]);
+  const [collectionLoading, setCollectionLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // File List Modal State (Clickable Detailed Numbers)
@@ -68,22 +74,37 @@ export const Dashboard: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsData, recentData, foldersData, dupData, bookmarkData] = await Promise.all([
+      const [statsData, recentData, foldersData, dupData, bookmarkData, collectionsData] = await Promise.all([
         api.getStats(),
         api.getRecentFiles(8).catch(() => []),
         api.getFolderStats(),
         api.getDuplicates(),
         api.getBookmarks().catch(() => []),
+        api.getCollections().catch(() => []),
       ]);
       setStats(statsData);
       setRecentFiles(recentData);
       setFolderStats(foldersData);
       setDuplicates(dupData);
       setBookmarks(bookmarkData);
+      setCollections(collectionsData);
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSelectCollection = async (c: SmartCollectionItem) => {
+    setSelectedCollection(c);
+    setCollectionLoading(true);
+    try {
+      const files = await api.getCollectionFiles(c.id, 50);
+      setCollectionFiles(files);
+    } catch (err) {
+      console.error('Failed to load collection files', err);
+    } finally {
+      setCollectionLoading(false);
     }
   };
 
@@ -401,6 +422,117 @@ export const Dashboard: React.FC = () => {
           </p>
           <p className="text-xs text-slate-500 mt-1">Configured local directories</p>
         </TiltCard>
+      </div>
+
+      {/* ============================================================== */}
+      {/* SMART COLLECTIONS (AUTOMATIC MEMORY BUCKETS)                   */}
+      {/* ============================================================== */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-serif font-bold text-charcoal dark:text-white flex items-center gap-2">
+              <span>✨ Smart Collections</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Auto-categorized by deep content inspection across invoices, credentials, study notes, and code.
+            </p>
+          </div>
+          {selectedCollection && (
+            <button
+              onClick={() => setSelectedCollection(null)}
+              className="text-xs text-slate-400 hover:text-charcoal dark:hover:text-white underline"
+            >
+              Close Collection
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {collections.map((c) => {
+            const isSelected = selectedCollection?.id === c.id;
+            return (
+              <div
+                key={c.id}
+                onClick={() => handleSelectCollection(c)}
+                className={`glass-card p-4 rounded-2xl border cursor-pointer transition-all hover:scale-[1.02] shadow-sm text-left ${
+                  isSelected
+                    ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 ring-2 ring-indigo-400/40'
+                    : 'border-alabaster dark:border-white/10 hover:border-indigo-300 dark:hover:border-indigo-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl">{c.icon}</span>
+                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-charcoal dark:text-white">
+                    {c.count}
+                  </span>
+                </div>
+                <h3 className="font-semibold text-xs text-charcoal dark:text-white truncate">
+                  {c.title}
+                </h3>
+                <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                  {c.description}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Selected Collection Inspector Drawer */}
+        {selectedCollection && (
+          <div className="glass-card rounded-2xl p-5 border border-indigo-200/60 dark:border-indigo-900/40 shadow-soft space-y-4 animate-in fade-in">
+            <div className="flex items-center justify-between border-b border-alabaster dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{selectedCollection.icon}</span>
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-charcoal dark:text-white">
+                    {selectedCollection.title} ({collectionFiles.length} files)
+                  </h3>
+                  <p className="text-xs text-slate-500">{selectedCollection.description}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedCollection(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-charcoal dark:hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {collectionLoading ? (
+              <div className="py-8 text-center text-xs text-slate-400">Loading collection files...</div>
+            ) : collectionFiles.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">No indexed files matched this collection yet.</div>
+            ) : (
+              <div className="divide-y divide-alabaster dark:divide-white/10 max-h-72 overflow-y-auto">
+                {collectionFiles.map((f) => (
+                  <div key={f.id} className="py-2.5 flex items-center justify-between gap-3 hover:bg-black/5 dark:hover:bg-white/5 px-2 rounded-xl transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-charcoal dark:text-white truncate">{f.filename}</p>
+                      <p className="text-[11px] font-mono text-slate-400 truncate">{f.path}</p>
+                      <div className="mt-1">
+                        <FileTagList fileId={f.id} compact />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigate(`/assistant?fileId=${f.id}&fileName=${encodeURIComponent(f.filename)}`)}
+                        className="px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40 text-[11px] font-medium text-purple-700 dark:text-purple-300 flex items-center gap-1"
+                      >
+                        <Sparkles size={11} /> AI
+                      </button>
+                      <button
+                        onClick={() => api.openFile(f.id)}
+                        className="px-2 py-1 rounded-lg bg-onyx text-white dark:bg-white dark:text-onyx text-[11px] font-medium flex items-center gap-1"
+                      >
+                        <ExternalLink size={11} /> Open
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ============================================================== */}

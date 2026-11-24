@@ -25,8 +25,10 @@ import {
   Clock,
   HardDrive,
   RefreshCw,
+  BoxSelect,
+  Layers,
 } from 'lucide-react';
-import { api, ImageOCRResult } from '../api/client';
+import { api, ImageOCRResult, OCRBoxItem } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { FileActionMenu } from '../components/FileActionMenu';
 import { TiltCard } from '../components/TiltCard';
@@ -73,6 +75,11 @@ export const VisualMemory: React.FC = () => {
 
   // Lightbox Modal
   const [lightboxItem, setLightboxItem] = useState<ImageOCRResult | null>(null);
+
+  // Bounding box overlay & copy image state
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [copiedImageId, setCopiedImageId] = useState<string | null>(null);
+  const [hoveredBoxText, setHoveredBoxText] = useState<string | null>(null);
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -142,6 +149,43 @@ export const VisualMemory: React.FC = () => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleCopyImage = async (fileId: string) => {
+    try {
+      const response = await fetch(`/api/files/${fileId}/view`);
+      if (!response.ok) throw new Error('Failed to fetch image data');
+      const blob = await response.blob();
+      // Most browser clipboard APIs require image/png
+      let pngBlob = blob;
+      if (blob.type !== 'image/png') {
+        // Convert to PNG canvas blob
+        const img = new window.Image();
+        const url = URL.createObjectURL(blob);
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          pngBlob = await new Promise((res) => canvas.toBlob((b) => res(b || blob), 'image/png')) || blob;
+        }
+        URL.revokeObjectURL(url);
+      }
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': pngBlob })
+      ]);
+      setCopiedImageId(fileId);
+      setTimeout(() => setCopiedImageId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy image to clipboard:', err);
+      alert('Could not copy image directly to clipboard. You can download or open it.');
+    }
   };
 
   const sampleOCRQueries = [
@@ -935,21 +979,106 @@ export const VisualMemory: React.FC = () => {
 
             {selectedItem ? (
               <div className="space-y-4">
-                {/* Large Preview Image */}
-                <div
-                  onClick={() => setLightboxItem(selectedItem)}
-                  className="rounded-2xl overflow-hidden bg-black/5 dark:bg-black/30 max-h-64 flex items-center justify-center cursor-pointer relative group border border-alabaster dark:border-white/10"
-                >
-                  <img
-                    src={`/api/files/${selectedItem.file_id}/view`}
-                    alt={selectedItem.filename}
-                    className="w-full h-auto max-h-64 object-contain transition-transform group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="px-3 py-1.5 rounded-full bg-white/90 text-charcoal text-xs font-semibold shadow-md flex items-center gap-1.5">
-                      <Maximize2 size={13} /> Click to Fullscreen
-                    </span>
+                {/* Large Preview Image with Bounding Box Overlay */}
+                <div className="relative">
+                  <div
+                    onClick={() => setLightboxItem(selectedItem)}
+                    className="rounded-2xl overflow-hidden bg-black/5 dark:bg-black/30 max-h-64 flex items-center justify-center cursor-pointer relative group border border-alabaster dark:border-white/10"
+                  >
+                    <div className="relative inline-block max-w-full max-h-64">
+                      <img
+                        src={`/api/files/${selectedItem.file_id}/view`}
+                        alt={selectedItem.filename}
+                        className="w-full h-auto max-h-64 object-contain transition-transform group-hover:scale-[1.02]"
+                      />
+
+                      {/* RapidOCR Word Bounding Box Highlights */}
+                      {showBoxes && selectedItem.boxes && selectedItem.boxes.length > 0 && selectedItem.img_width && selectedItem.img_height && (
+                        <div className="absolute inset-0 pointer-events-auto">
+                          {selectedItem.boxes.map((b, idx) => {
+                            const xs = b.box.map(p => p[0]);
+                            const ys = b.box.map(p => p[1]);
+                            const minX = Math.min(...xs);
+                            const maxX = Math.max(...xs);
+                            const minY = Math.min(...ys);
+                            const maxY = Math.max(...ys);
+                            const left = `${(minX / selectedItem.img_width!) * 100}%`;
+                            const top = `${(minY / selectedItem.img_height!) * 100}%`;
+                            const width = `${((maxX - minX) / selectedItem.img_width!) * 100}%`;
+                            const height = `${((maxY - minY) / selectedItem.img_height!) * 100}%`;
+                            const isQueryMatch = query.trim() !== '' && b.text.toLowerCase().includes(query.toLowerCase());
+
+                            return (
+                              <div
+                                key={idx}
+                                style={{ left, top, width, height }}
+                                title={`${b.text} (${Math.round(b.confidence * 100)}%)`}
+                                onMouseEnter={() => setHoveredBoxText(b.text)}
+                                onMouseLeave={() => setHoveredBoxText(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopyText(b.text, `box-${idx}`);
+                                }}
+                                className={`absolute rounded transition-all cursor-pointer ${
+                                  isQueryMatch
+                                    ? 'bg-amber-400/40 border-2 border-amber-500 shadow-md ring-1 ring-amber-300'
+                                    : 'border border-cyan-400/70 bg-cyan-400/15 hover:bg-cyan-400/35 hover:border-cyan-300'
+                                }`}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="absolute top-2 right-2 flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+                      <span className="px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-medium flex items-center gap-1 shadow">
+                        <Maximize2 size={11} /> Fullscreen
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Lens & Copy Controls Bar */}
+                  <div className="flex items-center justify-between mt-2 px-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowBoxes(!showBoxes)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-colors font-medium ${
+                        showBoxes
+                          ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-600 dark:text-cyan-400'
+                          : 'bg-black/5 dark:bg-white/5 border-alabaster dark:border-white/10 text-slate-500 hover:text-charcoal dark:hover:text-white'
+                      }`}
+                      title="Toggle Google Lens-style OCR highlights"
+                    >
+                      <BoxSelect size={13} />
+                      <span>{showBoxes ? 'Lens Boxes Active' : 'Show Word Boxes'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyImage(selectedItem.file_id)}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-alabaster dark:border-white/10 bg-white dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-charcoal dark:text-white flex items-center gap-1.5 font-medium transition-colors shadow-xs"
+                      title="Copy raw screenshot to clipboard"
+                    >
+                      {copiedImageId === selectedItem.file_id ? (
+                        <>
+                          <Check size={13} className="text-emerald-500" />
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Image Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={13} />
+                          <span>Copy Image</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {hoveredBoxText && (
+                    <div className="mt-1.5 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-sm text-white text-[11px] font-mono truncate">
+                      Detected: <span className="text-cyan-300 font-semibold">{hoveredBoxText}</span> (click box to copy)
+                    </div>
+                  )}
                 </div>
 
                 {/* File Details */}
@@ -1055,6 +1184,37 @@ export const VisualMemory: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
+                  onClick={() => setShowBoxes(!showBoxes)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                    showBoxes
+                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-300'
+                      : 'bg-white/10 border-white/20 text-slate-300 hover:text-white'
+                  }`}
+                  title="Toggle bounding box highlights"
+                >
+                  <BoxSelect size={13} />
+                  <span>{showBoxes ? 'Lens Boxes ON' : 'Show Boxes'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyImage(lightboxItem.file_id)}
+                  className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                  title="Copy image to clipboard"
+                >
+                  {copiedImageId === lightboxItem.file_id ? (
+                    <>
+                      <Check size={13} className="text-emerald-400" />
+                      <span className="text-emerald-300">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={13} />
+                      <span>Copy Image</span>
+                    </>
+                  )}
+                </button>
+                <button
                   onClick={() => {
                     const item = lightboxItem;
                     setLightboxItem(null);
@@ -1081,13 +1241,50 @@ export const VisualMemory: React.FC = () => {
               </div>
             </div>
 
-            {/* High-res image display */}
-            <div className="flex-1 min-h-[300px] overflow-auto flex items-center justify-center bg-black/40 rounded-2xl p-2">
-              <img
-                src={`/api/files/${lightboxItem.file_id}/view`}
-                alt={lightboxItem.filename}
-                className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-2xl"
-              />
+            {/* High-res image display with Lens Overlays */}
+            <div className="flex-1 min-h-[300px] overflow-auto flex items-center justify-center bg-black/40 rounded-2xl p-2 relative">
+              <div className="relative inline-block max-w-full max-h-[60vh]">
+                <img
+                  src={`/api/files/${lightboxItem.file_id}/view`}
+                  alt={lightboxItem.filename}
+                  className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-2xl block"
+                />
+
+                {showBoxes && lightboxItem.boxes && lightboxItem.boxes.length > 0 && lightboxItem.img_width && lightboxItem.img_height && (
+                  <div className="absolute inset-0 pointer-events-auto">
+                    {lightboxItem.boxes.map((b, idx) => {
+                      const xs = b.box.map(p => p[0]);
+                      const ys = b.box.map(p => p[1]);
+                      const minX = Math.min(...xs);
+                      const maxX = Math.max(...xs);
+                      const minY = Math.min(...ys);
+                      const maxY = Math.max(...ys);
+                      const left = `${(minX / lightboxItem.img_width!) * 100}%`;
+                      const top = `${(minY / lightboxItem.img_height!) * 100}%`;
+                      const width = `${((maxX - minX) / lightboxItem.img_width!) * 100}%`;
+                      const height = `${((maxY - minY) / lightboxItem.img_height!) * 100}%`;
+                      const isQueryMatch = query.trim() !== '' && b.text.toLowerCase().includes(query.toLowerCase());
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{ left, top, width, height }}
+                          title={`${b.text} (${Math.round(b.confidence * 100)}%)`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCopyText(b.text, `lightbox-box-${idx}`);
+                          }}
+                          className={`absolute rounded transition-all cursor-pointer ${
+                            isQueryMatch
+                              ? 'bg-amber-400/40 border-2 border-amber-400 shadow-lg ring-1 ring-amber-200'
+                              : 'border border-cyan-400/70 bg-cyan-400/15 hover:bg-cyan-400/40 hover:border-cyan-200'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* OCR Text bottom drawer in modal */}

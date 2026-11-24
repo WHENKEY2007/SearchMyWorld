@@ -18,6 +18,18 @@ def init_db() -> None:
         conn.execute("PRAGMA synchronous = NORMAL;")
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.executescript(schema_sql)
+        
+        # Ensure image_ocr has bounding box & dimensions columns
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(image_ocr);")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "boxes_json" not in columns:
+            conn.execute("ALTER TABLE image_ocr ADD COLUMN boxes_json TEXT;")
+        if "img_width" not in columns:
+            conn.execute("ALTER TABLE image_ocr ADD COLUMN img_width INTEGER;")
+        if "img_height" not in columns:
+            conn.execute("ALTER TABLE image_ocr ADD COLUMN img_height INTEGER;")
+            
         conn.commit()
 
 @contextmanager
