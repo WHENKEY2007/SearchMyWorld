@@ -96,13 +96,21 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleSelectCollection = async (c: SmartCollectionItem) => {
+    // If clicking the currently selected collection, toggle it off
+    if (selectedCollection?.id === c.id) {
+      setSelectedCollection(null);
+      setCollectionFiles([]);
+      return;
+    }
+
     setSelectedCollection(c);
     setCollectionLoading(true);
     try {
-      const files = await api.getCollectionFiles(c.id, 50);
-      setCollectionFiles(files);
+      const res = await api.getCollectionFiles(c.id, 50);
+      setCollectionFiles(res?.files || []);
     } catch (err) {
       console.error('Failed to load collection files', err);
+      setCollectionFiles([]);
     } finally {
       setCollectionLoading(false);
     }

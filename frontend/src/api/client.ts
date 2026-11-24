@@ -553,7 +553,7 @@ export const api = {
     return res.json();
   },
 
-  getCollectionFiles: async (collectionId: string, limit: number = 50): Promise<FileItem[]> => {
+  getCollectionFiles: async (collectionId: string, limit: number = 50): Promise<{ collection_id: string; files: FileItem[]; total: number }> => {
     const res = await fetch(`${API_BASE}/files/collections/${encodeURIComponent(collectionId)}?limit=${limit}`);
     if (!res.ok) throw new Error(`Failed to fetch files for collection ${collectionId}`);
     return res.json();

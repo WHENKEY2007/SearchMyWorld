@@ -1070,41 +1070,41 @@ class DatabaseRepository:
                 "id": "invoices",
                 "title": "Invoices & Receipts",
                 "description": "Bills, payment receipts, taxes, and financial orders",
-                "icon": "Receipt",
+                "icon": "🧾",
                 "color": "emerald",
-                "query": "SELECT COUNT(DISTINCT f.id) FROM files f LEFT JOIN document_chunks c ON f.id = c.file_id WHERE f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%' OR c.content LIKE '%invoice%' OR c.content LIKE '%receipt%' OR c.content LIKE '%total amount%' OR c.content LIKE '%subtotal%' OR c.content LIKE '%gstin%'"
+                "where": "(f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%')"
             },
             {
                 "id": "certificates",
                 "title": "Certificates & Credentials",
                 "description": "Diplomas, credentials, IDs, and certificates",
-                "icon": "Award",
+                "icon": "📜",
                 "color": "amber",
-                "query": "SELECT COUNT(DISTINCT f.id) FROM files f LEFT JOIN document_chunks c ON f.id = c.file_id WHERE f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%' OR c.content LIKE '%certificate%' OR c.content LIKE '%has successfully completed%' OR c.content LIKE '%hereby awarded%' OR c.content LIKE '%credential%'"
+                "where": "(f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%')"
             },
             {
                 "id": "study",
-                "title": "Notes & Study Material",
+                "title": "Study & Notes",
                 "description": "Assignments, lectures, summaries, and books",
-                "icon": "BookOpen",
+                "icon": "📓",
                 "color": "purple",
-                "query": "SELECT COUNT(DISTINCT f.id) FROM files f LEFT JOIN document_chunks c ON f.id = c.file_id WHERE f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%' OR c.content LIKE '%syllabus%' OR c.content LIKE '%lecture%' OR c.content LIKE '%assignment%' OR c.content LIKE '%chapter%'"
+                "where": "(f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%')"
             },
             {
                 "id": "code",
                 "title": "Code & Configs",
                 "description": "Source code, notebooks, scripts, and configs",
-                "icon": "Code2",
+                "icon": "💻",
                 "color": "blue",
-                "query": "SELECT COUNT(DISTINCT f.id) FROM files f WHERE f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ini', '.ipynb', '.env')"
+                "where": "f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ini', '.ipynb', '.env')"
             },
             {
                 "id": "screenshots",
                 "title": "Visual Screenshots",
                 "description": "All captured screens, error dialogs, and diagrams",
-                "icon": "Camera",
+                "icon": "📸",
                 "color": "rose",
-                "query": "SELECT COUNT(DISTINCT f.id) FROM files f WHERE f.file_type = 'image' OR f.extension IN ('.png', '.jpg', '.jpeg', '.webp')"
+                "where": "(f.file_type = 'image' OR f.extension IN ('.png', '.jpg', '.jpeg', '.webp'))"
             }
         ]
 
@@ -1113,7 +1113,8 @@ class DatabaseRepository:
             cursor = conn.cursor()
             for col in collections_def:
                 try:
-                    cursor.execute(col["query"])
+                    q = f"SELECT COUNT(*) FROM files f WHERE {col['where']}"
+                    cursor.execute(q)
                     cnt = cursor.fetchone()[0] or 0
                 except Exception:
                     cnt = 0
@@ -1131,9 +1132,9 @@ class DatabaseRepository:
     def get_collection_files(collection_id: str, limit: int = 100, offset: int = 0) -> Tuple[List[Dict[str, Any]], int]:
         """Returns files matching a specific collection."""
         where_map = {
-            "invoices": "(f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%' OR c.content LIKE '%invoice%' OR c.content LIKE '%receipt%' OR c.content LIKE '%total amount%' OR c.content LIKE '%subtotal%' OR c.content LIKE '%gstin%')",
-            "certificates": "(f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%' OR c.content LIKE '%certificate%' OR c.content LIKE '%has successfully completed%' OR c.content LIKE '%hereby awarded%' OR c.content LIKE '%credential%')",
-            "study": "(f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%' OR c.content LIKE '%syllabus%' OR c.content LIKE '%lecture%' OR c.content LIKE '%assignment%' OR c.content LIKE '%chapter%')",
+            "invoices": "(f.filename LIKE '%invoice%' OR f.filename LIKE '%receipt%' OR f.filename LIKE '%bill%' OR f.filename LIKE '%tax%' OR f.filename LIKE '%gst%' OR f.filename LIKE '%payment%' OR f.filename LIKE '%order%')",
+            "certificates": "(f.filename LIKE '%cert%' OR f.filename LIKE '%diploma%' OR f.filename LIKE '%degree%' OR f.filename LIKE '%passport%' OR f.filename LIKE '%license%' OR f.filename LIKE '%identity%' OR f.filename LIKE '%id card%')",
+            "study": "(f.filename LIKE '%note%' OR f.filename LIKE '%lecture%' OR f.filename LIKE '%assignment%' OR f.filename LIKE '%syllabus%' OR f.filename LIKE '%chapter%' OR f.filename LIKE '%study%' OR f.filename LIKE '%exam%')",
             "code": "f.extension IN ('.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ini', '.ipynb', '.env')",
             "screenshots": "(f.file_type = 'image' OR f.extension IN ('.png', '.jpg', '.jpeg', '.webp'))"
         }
@@ -1143,16 +1144,15 @@ class DatabaseRepository:
 
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            count_q = f"SELECT COUNT(DISTINCT f.id) FROM files f LEFT JOIN document_chunks c ON f.id = c.file_id WHERE {where_clause}"
+            count_q = f"SELECT COUNT(*) FROM files f WHERE {where_clause}"
             cursor.execute(count_q)
             total = cursor.fetchone()[0] or 0
 
             q = f"""
-                SELECT DISTINCT f.id, f.filename, f.path, f.extension, f.file_type, f.file_size,
+                SELECT f.id, f.filename, f.path, f.extension, f.file_type, f.file_size,
                        f.created_at, f.modified_at, f.indexed_at, f.indexing_status,
                        CASE WHEN b.id IS NOT NULL THEN 1 ELSE 0 END AS is_bookmarked
                 FROM files f
-                LEFT JOIN document_chunks c ON f.id = c.file_id
                 LEFT JOIN user_bookmarks b ON f.id = b.file_id
                 WHERE {where_clause}
                 ORDER BY f.modified_at DESC
